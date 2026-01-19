@@ -1,0 +1,7 @@
+{
+  "name": "VoucherVault iOS",
+  "description": "Eine mobile-first Gutschein-Verwaltungs-App mit Familien-Sharing, Supabase-Integration und intelligentem Scan-Feature.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
