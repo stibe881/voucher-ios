@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'info' | 'warning' } | null>(null);
   const [pendingInvites, setPendingInvites] = useState<FamilyInvite[]>([]);
+  const [pendingVoucherId, setPendingVoucherId] = useState<string | null>(null);
 
   const loadingTimerRef = useRef<any>(null);
 
@@ -116,14 +117,79 @@ const App: React.FC = () => {
       if (voucher) {
         setSelectedVoucher(voucher);
         setView('detail');
+      } else {
+        // If called from notification but data not ready, we could also use pending logic
+        // But usually app is open. For logic consistency let's rely on standard flow or add pending if crucial.
+        // Notification listener is separate.
       }
     });
     return () => subscription.remove();
   }, [vouchers]);
 
+  // Handle deep links (e.g. from Ausflugfinder)
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      console.log("[App] Deep link received:", event.url);
+      try {
+        const url = event.url;
+        // Expected format: vouchervault://voucher/[id]
+        if (url.includes('voucher/')) {
+          const parts = url.split('voucher/');
+          if (parts.length > 1) {
+            const voucherId = parts[1];
+            console.log("[App] Deep link target ID:", voucherId);
+
+            const voucher = vouchers.find(v => v.id === voucherId);
+            if (voucher) {
+              console.log("[App] Found voucher immediately, navigating.");
+              setSelectedVoucher(voucher);
+              setView('detail');
+            } else {
+              console.log("[App] Voucher not found yet, setting pending ID:", voucherId);
+              setPendingVoucherId(voucherId);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[App] Error handling deep link:", e);
+      }
+    };
+
+    const Linking = require('react-native').Linking;
+
+    // Listen for incoming links while app is open
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Check for initial link if app was closed
+    Linking.getInitialURL().then((url: string | null) => {
+      if (url) handleDeepLink({ url });
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [vouchers]); // Re-run when vouchers change
+
+  // Process pending deep link/notification once vouchers are loaded
+  useEffect(() => {
+    if (pendingVoucherId && vouchers.length > 0) {
+      console.log("[App] Processing pending voucher ID:", pendingVoucherId);
+      const voucher = vouchers.find(v => v.id === pendingVoucherId);
+      if (voucher) {
+        setSelectedVoucher(voucher);
+        setView('detail');
+        setPendingVoucherId(null); // Clear pending
+      } else {
+        console.log("[App] Pending voucher still not found in loaded list.");
+      }
+    }
+  }, [vouchers, pendingVoucherId]);
+
+
   const handleLogout = async () => {
     await supabaseService.signOut();
     clearData();
+    setPendingVoucherId(null);
   };
 
   const showNotification = async (title: string, body: string, type: 'info' | 'success' | 'warning' = 'info') => {
