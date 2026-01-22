@@ -477,17 +477,23 @@ export const supabaseService = {
   // ===== TRIPS Integration =====
   getTrips: async (userId: string) => {
     // Da wir in derselben DB sind, können wir direkt auf trips zugreifen.
-    // Falls RLS aktiv ist, muss der User Zugriff haben.
-    // Wir holen nur einfache Infos.
+    // Wir holen nur einfache Infos + das erste Foto
     const { data, error } = await supabase
       .from('ausfluege')
-      .select('id, title:name, destination:adresse') // Correctly map legacy columns. Remove non-existent 'image'/'status'
+      .select('id, title:name, destination:adresse, ausfluege_fotos(full_url)')
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error("Error fetching trips:", error);
       return [];
     }
-    return (data || []) as Trip[];
+
+    // Map result to Trip type
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      destination: t.destination,
+      image: t.ausfluege_fotos?.[0]?.full_url || null
+    })) as Trip[];
   }
 };

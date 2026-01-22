@@ -396,7 +396,7 @@ ACHTE BESONDERS AUF:
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Kategorie</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Sonstiges'].map(cat => (
+              {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Gastro', 'Sonstiges'].map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.familyItem, category === cat && styles.familyItemActive]}

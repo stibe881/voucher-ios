@@ -239,14 +239,14 @@ const App: React.FC = () => {
       <SafeAreaView style={styles.container}>
         {toast && <Toast message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
         <View style={styles.content}>
-          {view === 'dashboard' && (
+          <View style={{ flex: 1, display: view === 'dashboard' ? 'flex' : 'none' }}>
             <Dashboard
               vouchers={vouchers} families={families} notifications={notifications}
               onUpdateVoucher={handleUpdateVoucher} onSelectVoucher={(v) => { setSelectedVoucher(v); setView('detail'); }}
               onOpenNotifications={() => setView('notifications')} onRefresh={() => loadAllUserData(auth.user!.id)}
               loadError={loadError} userName={auth.user?.name}
             />
-          )}
+          </View>
           {view === 'add' && <AddVoucher families={families} currentUser={auth.user} onCancel={() => setView('dashboard')} onSave={async (v) => {
             try {
               console.log('Saving voucher:', v);

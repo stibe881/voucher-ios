@@ -221,7 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
               >
                 <Text style={[styles.sortChipText, !filterCategory && styles.sortChipTextActive]}>Alle</Text>
               </TouchableOpacity>
-              {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Sonstiges'].map(cat => (
+              {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Gastro', 'Sonstiges'].map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.sortChip, filterCategory === cat && styles.sortChipActive]}
@@ -266,8 +266,8 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                 <View style={styles.cardHeader}>
                   <View style={styles.iconBox}><Icon name={voucher.type === 'VALUE' ? 'card-outline' : 'list-outline'} size={22} color="#2563eb" /></View>
                   <View style={styles.titleBox}>
-                    <Text style={styles.voucherTitle} numberOfLines={1}>{voucher.title}</Text>
-                    <Text style={styles.voucherStore} numberOfLines={1}>{voucher.store}</Text>
+                    <Text style={styles.voucherTitle} numberOfLines={1}>{voucher.store}</Text>
+                    <Text style={styles.voucherStore} numberOfLines={1}>{voucher.title}</Text>
                   </View>
                   <View style={styles.amountBox}>
                     <Text style={styles.amountText}>{remaining.toFixed(2)}{voucher.type === 'VALUE' && <Text style={styles.currencyText}> {voucher.currency}</Text>}</Text>
@@ -285,7 +285,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                   </View>
                   <TouchableOpacity
                     style={[styles.useButton, (remaining <= 0 || processing) && { opacity: 0.3 }]}
-                    onPress={(e: any) => { e.stopPropagation(); if (remaining > 0 && !processing) useVoucher(voucher); }}
+                    onPress={(e: any) => { e.stopPropagation(); if (remaining > 0 && !processing) handleRedeem(voucher); }}
                   >
                     <Text style={styles.useButtonText}>{processing ? '...' : 'Abziehen'}</Text>
                   </TouchableOpacity>
@@ -301,39 +301,41 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
             </View>
           )}
         </View>
-      </ScrollView>
+      </ScrollView >
 
       {/* Redemption Modal */}
-      {showRedeemModal && redeemVoucher && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {redeemVoucher.type === 'VALUE' ? 'Betrag abziehen' : 'Anzahl abziehen'}
-            </Text>
-            <Text style={styles.modalSubtitle}>{redeemVoucher.title}</Text>
+      {
+        showRedeemModal && redeemVoucher && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>
+                {redeemVoucher.type === 'VALUE' ? 'Betrag abziehen' : 'Anzahl abziehen'}
+              </Text>
+              <Text style={styles.modalSubtitle}>{redeemVoucher.title}</Text>
 
-            <TextInput
-              style={styles.modalInput}
-              value={redeemAmount}
-              onChangeText={setRedeemAmount}
-              placeholder={redeemVoucher.type === 'VALUE' ? "Betrag (z.B. 20.00)" : "Anzahl"}
-              keyboardType="numeric"
-              autoFocus
-              placeholderTextColor="#9ca3af"
-            />
+              <TextInput
+                style={styles.modalInput}
+                value={redeemAmount}
+                onChangeText={setRedeemAmount}
+                placeholder={redeemVoucher.type === 'VALUE' ? "Betrag (z.B. 20.00)" : "Anzahl"}
+                keyboardType="numeric"
+                autoFocus
+                placeholderTextColor="#9ca3af"
+              />
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRedeemModal(false)}>
-                <Text style={styles.modalCancelText}>Abbrechen</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmBtn} onPress={processRedemption}>
-                <Text style={styles.modalConfirmText}>Bestätigen</Text>
-              </TouchableOpacity>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRedeemModal(false)}>
+                  <Text style={styles.modalCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalConfirmBtn} onPress={processRedemption}>
+                  <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      )}
-    </View>
+        )
+      }
+    </View >
   );
 };
 
