@@ -105,11 +105,18 @@ export const supabaseService = {
     // Fetch vouchers where EITHER:
     // 1. user_id matches (own vouchers), OR
     // 2. family_id is in user's families (shared family vouchers)
-    const { data, error } = await supabase
-      .from('vouchers')
-      .select('*')
-      .or(`user_id.eq.${userId},family_id.in.(${familyIds.join(',')})`)
-      .order('created_at', { ascending: false });
+    // Build query based on whether user has families
+    let query = supabase.from('vouchers').select('*');
+
+    if (familyIds.length > 0) {
+      // User has families - include family vouchers
+      query = query.or(`user_id.eq.${userId},family_id.in.(${familyIds.join(',')})`);
+    } else {
+      // User has no families - only show own vouchers
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
     return (data || []) as Voucher[];
