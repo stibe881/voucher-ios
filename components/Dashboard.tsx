@@ -49,7 +49,11 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
     let result = vouchers.filter(v =>
       (v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.store.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      (!filterFamily || v.family_id === filterFamily) &&
+      (v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.store.toLowerCase().includes(searchQuery.toLowerCase())) &&
+      (!filterFamily ||
+        (filterFamily === 'personal' ? !v.family_id : v.family_id === filterFamily)
+      ) &&
       (!filterCategory || v.category === filterCategory)
     );
 
@@ -201,6 +205,12 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                 onPress={() => setFilterFamily(null)}
               >
                 <Text style={[styles.sortChipText, !filterFamily && styles.sortChipTextActive]}>Alle</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sortChip, filterFamily === 'personal' && styles.sortChipActive]}
+                onPress={() => setFilterFamily(filterFamily === 'personal' ? null : 'personal')}
+              >
+                <Text style={[styles.sortChipText, filterFamily === 'personal' && styles.sortChipTextActive]}>Nur Ich</Text>
               </TouchableOpacity>
               {families.map(f => (
                 <TouchableOpacity
