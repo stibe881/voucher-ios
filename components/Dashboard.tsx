@@ -146,7 +146,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Gutscheine</Text>
-          <Text style={styles.date}>{vouchers.length} Verfügbar</Text>
+          <Text style={styles.date}>{filteredAndSortedVouchers.length} Verfügbar</Text>
         </View>
         <TouchableOpacity style={styles.notificationBtn} onPress={onOpenNotifications}>
           <Icon name="notifications-outline" size={24} color="#0f172a" />
