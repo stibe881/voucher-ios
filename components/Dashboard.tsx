@@ -270,7 +270,14 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                     <Text style={styles.voucherStore} numberOfLines={1}>{voucher.title}</Text>
                   </View>
                   <View style={styles.amountBox}>
-                    <Text style={styles.amountText}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.currencyText}> {voucher.type === 'QUANTITY' ? 'Stk.' : voucher.currency}</Text></Text>
+                    {voucher.code_pool && voucher.code_pool.length > 0 ? (
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.amountText}>{voucher.code_pool.filter(c => !c.used).length}<Text style={styles.currencyText}>/{voucher.code_pool.length}</Text></Text>
+                        <Text style={[styles.currencyText, { fontSize: 11, marginTop: -2 }]}>Codes</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.amountText}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.currencyText}> {voucher.type === 'QUANTITY' ? 'Stk.' : voucher.currency}</Text></Text>
+                    )}
                   </View>
                 </View>
 
