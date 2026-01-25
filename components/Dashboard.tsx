@@ -248,7 +248,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
         )}
 
         <View style={styles.list}>
-          {filteredAndSortedVouchers.map(voucher => {
+          {filteredAndSortedVouchers.filter(v => v && v.id).map(voucher => {
             const family = families.find(f => f.id === voucher.family_id);
             const remaining = Number(voucher.remaining_amount || 0);
             const initial = Number(voucher.initial_amount || 0);
