@@ -270,7 +270,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                     <Text style={styles.voucherStore} numberOfLines={1}>{voucher.title}</Text>
                   </View>
                   <View style={styles.amountBox}>
-                    <Text style={styles.amountText}>{remaining.toFixed(2)}{voucher.type === 'VALUE' && <Text style={styles.currencyText}> {voucher.currency}</Text>}</Text>
+                    <Text style={styles.amountText}>{voucher.type === 'QUANTITY' ? `${Math.floor(remaining)} Stk.` : remaining.toFixed(2)}{voucher.type === 'VALUE' && <Text style={styles.currencyText}> {voucher.currency}</Text>}</Text>
                   </View>
                 </View>
 
