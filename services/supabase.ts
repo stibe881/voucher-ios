@@ -148,6 +148,9 @@ export const supabaseService = {
       console.error("Supabase Update Error:", error);
       throw error;
     }
+    if (!data || data.length === 0) {
+      throw new Error("Voucher update returned no data");
+    }
     return data[0] as Voucher;
   },
 
