@@ -351,6 +351,32 @@ const App: React.FC = () => {
                 await supabaseService.markNotificationAsRead(id);
                 setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
               }}
+              onAcceptInvite={async (inviteId) => {
+                if (!auth.user) return;
+                try {
+                  const { error } = await supabaseService.acceptInviteAtomic(inviteId, auth.user.email, auth.user.name);
+                  if (error) throw new Error(error);
+                  showNotification("Erfolg", "Einladung angenommen!", 'success');
+                  // Refresh data
+                  await loadAllUserData(auth.user.id);
+                } catch (err: any) {
+                  showNotification("Fehler", err.message || "Fehler beim Annehmen", 'warning');
+                }
+              }}
+              onRejectInvite={async (inviteId) => {
+                if (!auth.user) return;
+                try {
+                  await supabaseService.rejectInvite(inviteId);
+                  showNotification("Info", "Einladung abgelehnt", 'info');
+                  // Refresh invites
+                  if (auth.user.email) {
+                    const invites = await supabaseService.getPendingInvitesForUser(auth.user.email);
+                    setPendingInvites(invites);
+                  }
+                } catch (err: any) {
+                  showNotification("Fehler", "Fehler beim Ablehnen", 'warning');
+                }
+              }}
             />
           )}
         </View>

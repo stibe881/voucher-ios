@@ -446,7 +446,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           <View style={styles.balanceContainer}>
             <View style={styles.balanceRow}>
               <Text style={styles.balanceValue}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.balanceCurrency}> {voucher.type === 'QUANTITY' ? 'Stk.' : voucher.currency}</Text></Text>
-              <Text style={styles.initialText}>von {voucher.type === 'QUANTITY' ? Math.floor(Number(voucher.initial_amount || 0)) : Number(voucher.initial_amount || 0).toFixed(2)}{voucher.type === 'QUANTITY' ? ' Stk.' : ''}</Text>
+              <Text style={styles.initialText}>von {voucher.type === 'QUANTITY' ? Math.floor(Number(voucher.initial_amount || 0)) : Number(voucher.initial_amount || 0).toFixed(2)} {voucher.type === 'QUANTITY' ? 'Stk.' : ''}</Text>
             </View>
             <View style={styles.progressBarContainer}>
               <View style={[styles.progressBar, { width: `${progress}%`, backgroundColor: progress < 20 ? '#ef4444' : '#2563eb' }]} />

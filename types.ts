@@ -69,6 +69,11 @@ export interface AppNotification {
   timestamp: string;
   read: boolean;
   type: 'info' | 'success' | 'warning';
+  metadata?: {
+    invite_id?: string;
+    family_id?: string;
+    [key: string]: any;
+  };
 }
 
 export interface FamilyInvite {
