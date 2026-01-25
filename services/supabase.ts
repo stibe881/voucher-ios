@@ -263,32 +263,13 @@ export const supabaseService = {
   },
 
   removeFamilyMember: async (familyId: string, userId: string) => {
-    // Get current family
-    const { data: family, error: fetchError } = await supabase
-      .from('families')
-      .select('members')
-      .eq('id', familyId)
-      .single();
+    // Use RPC function to safely remove member on server side
+    const { error } = await supabase.rpc('leave_family', { family_id_param: familyId });
 
-    if (fetchError) throw fetchError;
-
-    // Get current user's email
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.email) throw new Error("User email not found");
-
-    // Remove user from members array by EMAIL (to match getFamilies logic)
-    const updatedMembers = (family.members || []).filter((m: any) => m.email?.toLowerCase() !== user.email.toLowerCase());
-
-    // Update family with new members array
-    const { error: updateError } = await supabase
-      .from('families')
-      .update({
-        members: updatedMembers,
-        member_count: updatedMembers.length + 1 // +1 for the owner
-      })
-      .eq('id', familyId);
-
-    if (updateError) throw updateError;
+    if (error) {
+      console.error('RPC leave_family error:', error);
+      throw error;
+    }
   },
 
   getProfile: async (userId: string) => {
