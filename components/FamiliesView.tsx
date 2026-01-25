@@ -376,7 +376,7 @@ const FamiliesView: React.FC<FamiliesViewProps> = ({ families, user, pendingInvi
                   <View style={styles.memberAvatar}><Text style={styles.memberAvatarText}>D</Text></View>
                   <Text style={styles.memberName}>Du (Inhaber)</Text>
                 </View>
-                {(selectedFamily.members || []).map(member => (
+                {(selectedFamily.members || []).filter(m => m && m.id).map(member => (
                   <View key={member.id} style={styles.memberItem}>
                     <View style={[styles.memberAvatar, { backgroundColor: '#f1f5f9' }]}><Text style={[styles.memberAvatarText, { color: '#64748b' }]}>{member.email[0].toUpperCase()}</Text></View>
                     <Text style={styles.memberName}>{member.email}</Text>
@@ -384,7 +384,7 @@ const FamiliesView: React.FC<FamiliesViewProps> = ({ families, user, pendingInvi
                   </View>
                 ))}
                 {/* Pending invites */}
-                {sentInvites.map(invite => (
+                {sentInvites.filter(inv => inv && inv.id).map(invite => (
                   <View key={invite.id} style={styles.memberItem}>
                     <View style={[styles.memberAvatar, { backgroundColor: '#fef3c7' }]}><Text style={[styles.memberAvatarText, { color: '#d97706' }]}>{invite.invitee_email[0].toUpperCase()}</Text></View>
                     <View style={{ flex: 1 }}>
