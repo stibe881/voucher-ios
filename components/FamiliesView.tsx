@@ -399,17 +399,19 @@ const FamiliesView: React.FC<FamiliesViewProps> = ({ families, user, pendingInvi
             <ScrollView contentContainerStyle={styles.modalContent}>
               <Text style={styles.modalSectionLabel}>Mitglieder verwalten</Text>
 
-              <View style={styles.memberInputRow}>
-                <TextInput
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  placeholder="E-Mail einladen"
-                  value={inviteEmail}
-                  onChangeText={setInviteEmail}
-                />
-                <TouchableOpacity style={styles.memberAddBtn} onPress={handleAddMember}>
-                  <Icon name="add" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
+              {user && selectedFamily.user_id === user.id && (
+                <View style={styles.memberInputRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    placeholder="E-Mail einladen"
+                    value={inviteEmail}
+                    onChangeText={setInviteEmail}
+                  />
+                  <TouchableOpacity style={styles.memberAddBtn} onPress={handleAddMember}>
+                    <Icon name="add" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <View style={styles.memberList}>
                 <View style={styles.memberItem}>
@@ -420,7 +422,9 @@ const FamiliesView: React.FC<FamiliesViewProps> = ({ families, user, pendingInvi
                   <View key={member.id} style={styles.memberItem}>
                     <View style={[styles.memberAvatar, { backgroundColor: '#f1f5f9' }]}><Text style={[styles.memberAvatarText, { color: '#64748b' }]}>{member.email[0].toUpperCase()}</Text></View>
                     <Text style={styles.memberName}>{member.email}</Text>
-                    <TouchableOpacity onPress={() => handleRemoveMember(member.id)}><Icon name="remove-circle-outline" size={20} color="#ef4444" /></TouchableOpacity>
+                    {user && selectedFamily.user_id === user.id && (
+                      <TouchableOpacity onPress={() => handleRemoveMember(member.id)}><Icon name="remove-circle-outline" size={20} color="#ef4444" /></TouchableOpacity>
+                    )}
                   </View>
                 ))}
                 {/* Pending invites */}
