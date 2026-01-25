@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Alert, Modal, Dimensions, Linking, Share } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Alert, Modal, Dimensions, Linking, Share, Platform } from 'react-native';
 
 import { Voucher, User, Family, Redemption, Trip } from '../types';
 import Icon from './Icon';
@@ -26,6 +26,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
 
   const [showRedeemModal, setShowRedeemModal] = useState(false);
   const [redeemInput, setRedeemInput] = useState('');
+  const [selectedCodeForRedeem, setSelectedCodeForRedeem] = useState<string | null>(null); // NEW: For code pool selection
 
   const [linkedTrip, setLinkedTrip] = useState<Trip | null>(null);
 
@@ -223,6 +224,50 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
   };
 
   const executeRedemption = async () => {
+    // Handle code pool vouchers
+    if (voucher.code_pool && voucher.code_pool.length > 0) {
+      if (!selectedCodeForRedeem) {
+        Alert.alert("Fehler", "Bitte wähle einen Code zum Einlösen.");
+        return;
+      }
+
+      setIsProcessing(true);
+      setShowRedeemModal(false);
+
+      try {
+        // Mark selected code as used
+        const updatedCodePool = voucher.code_pool.map(item =>
+          item.code === selectedCodeForRedeem
+            ? { ...item, used: true, used_at: new Date().toISOString(), used_by: owner?.name || 'Benutzer' }
+            : item
+        );
+
+        const newAmount = Math.max(0, remaining - 1);
+        const newHistoryEntry: Redemption = {
+          id: Date.now().toString(),
+          voucher_id: voucher.id,
+          amount: 1,
+          timestamp: new Date().toISOString(),
+          user_name: owner?.name || 'Benutzer',
+          code_used: selectedCodeForRedeem // Track which code was used
+        };
+
+        await onUpdateVoucher({
+          ...voucher,
+          remaining_amount: newAmount,
+          code_pool: updatedCodePool,
+          history: [newHistoryEntry, ...(voucher.history || [])]
+        });
+      } catch (err: any) {
+        Alert.alert("Fehler", "Update fehlgeschlagen.");
+      } finally {
+        setIsProcessing(false);
+        setSelectedCodeForRedeem(null);
+      }
+      return;
+    }
+
+    // Regular redemption (non-code-pool)
     const val = parseFloat(redeemInput.replace(',', '.'));
     if (isNaN(val) || val <= 0) {
       Alert.alert("Fehler", "Bitte einen gültigen Betrag eingeben.");
@@ -512,6 +557,33 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
             </TouchableOpacity>
           )}
 
+          {/* Code Pool Display */}
+          {voucher.code_pool && voucher.code_pool.length > 0 && (
+            <View style={styles.codePoolContainer}>
+              <Text style={styles.codePoolTitle}>Verfügbare Codes ({voucher.code_pool.filter(c => !c.used).length}/{voucher.code_pool.length})</Text>
+              {voucher.code_pool.map((item, index) => (
+                <View key={index} style={[styles.codeItem, item.used && styles.codeItemUsed]}>
+                  <View style={styles.codeIndicator}>
+                    {item.used ? (
+                      <Icon name="checkmark-circle" size={20} color="#10b981" />
+                    ) : (
+                      <Icon name="radio-button-off" size={20} color="#64748b" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.codeText, item.used && styles.codeTextUsed]}>{item.code}</Text>
+                    {item.used && item.used_at && (
+                      <Text style={styles.codeUsedDate}>
+                        Verwendet am {new Date(item.used_at).toLocaleDateString('de-DE')}
+                        {item.used_by && ` von ${item.used_by}`}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.divider} />
 
           <View style={styles.historySection}>
@@ -558,26 +630,73 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Einlösen</Text>
-            <Text style={styles.modalSubtitle}>Wieviel möchtest du vom Gutschein abziehen?</Text>
-            <View style={styles.modalInputWrapper}>
-              <TextInput
-                style={styles.modalInput}
-                value={redeemInput}
-                onChangeText={setRedeemInput}
-                keyboardType="numeric"
-                autoFocus
-                placeholder="0.00"
-              />
-              <Text style={styles.modalCurrency}>{voucher.currency}</Text>
-            </View>
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowRedeemModal(false); setRedeemInput(''); }}>
-                <Text style={styles.modalCancelText}>Abbrechen</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirm} onPress={executeRedemption}>
-                <Text style={styles.modalConfirmText}>Bestätigen</Text>
-              </TouchableOpacity>
-            </View>
+
+            {/* Code Pool Selection */}
+            {voucher.code_pool && voucher.code_pool.length > 0 ? (
+              <>
+                <Text style={styles.modalSubtitle}>Wähle einen Code zum Einlösen:</Text>
+                <ScrollView style={{ maxHeight: 250, marginBottom: 20 }}>
+                  {voucher.code_pool.filter(c => !c.used).map((item, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.codeSelectItem,
+                        selectedCodeForRedeem === item.code && styles.codeSelectItemActive
+                      ]}
+                      onPress={() => setSelectedCodeForRedeem(item.code)}
+                    >
+                      <View style={styles.codeSelectRadio}>
+                        {selectedCodeForRedeem === item.code ? (
+                          <View style={styles.codeSelectRadioInner} />
+                        ) : null}
+                      </View>
+                      <Text style={[
+                        styles.codeSelectText,
+                        selectedCodeForRedeem === item.code && styles.codeSelectTextActive
+                      ]}>
+                        {item.code}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowRedeemModal(false); setSelectedCodeForRedeem(null); }}>
+                    <Text style={styles.modalCancelText}>Abbrechen</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalConfirm, !selectedCodeForRedeem && { opacity: 0.5 }]}
+                    onPress={executeRedemption}
+                    disabled={!selectedCodeForRedeem}
+                  >
+                    <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              /* Regular Amount Input */
+              <>
+                <Text style={styles.modalSubtitle}>Wieviel möchtest du vom Gutschein abziehen?</Text>
+                <View style={styles.modalInputWrapper}>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={redeemInput}
+                    onChangeText={setRedeemInput}
+                    keyboardType="numeric"
+                    autoFocus
+                    placeholder="0.00"
+                  />
+                  <Text style={styles.modalCurrency}>{voucher.currency}</Text>
+                </View>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowRedeemModal(false); setRedeemInput(''); }}>
+                    <Text style={styles.modalCancelText}>Abbrechen</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalConfirm} onPress={executeRedemption}>
+                    <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -725,7 +844,25 @@ const styles = StyleSheet.create({
   tripIconBox: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#0ea5e9', justifyContent: 'center', alignItems: 'center', marginRight: 16, shadowColor: '#0ea5e9', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   tripLabel: { fontSize: 10, fontWeight: '800', color: '#0ea5e9', letterSpacing: 0.5, marginBottom: 2 },
   tripTitle: { fontSize: 16, fontWeight: '800', color: '#0c4a6e' },
-  tripDestination: { fontSize: 13, color: '#64748b', marginTop: 2 }
+  tripDestination: { fontSize: 13, color: '#64748b', marginTop: 2 },
+
+  // Code Pool Styles
+  codePoolContainer: { backgroundColor: '#fefce8', padding: 16, borderRadius: 20, marginBottom: 24, borderWidth: 1, borderColor: '#fef08a' },
+  codePoolTitle: { fontSize: 13, fontWeight: '800', color: '#854d0e', marginBottom: 12, letterSpacing: 0.5 },
+  codeItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#fef08a' },
+  codeItemUsed: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  codeIndicator: { marginRight: 12 },
+  codeText: { fontSize: 15, fontWeight: '700', color: '#1e293b', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  codeTextUsed: { color: '#166534', textDecorationLine: 'line-through' as 'line-through' },
+  codeUsedDate: { fontSize: 11, color: '#64748b', marginTop: 2 },
+
+  // Code Selection Modal Styles
+  codeSelectItem: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#f8fafc', borderRadius: 12, marginBottom: 8, borderWidth: 2, borderColor: '#e2e8f0' },
+  codeSelectItemActive: { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+  codeSelectRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#cbd5e1', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
+  codeSelectRadioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2563eb' },
+  codeSelectText: { fontSize: 15, fontWeight: '600', color: '#64748b', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  codeSelectTextActive: { color: '#2563eb', fontWeight: '700' }
 });
 
 export default VoucherDetail;
