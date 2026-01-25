@@ -19,6 +19,22 @@ interface VoucherDetailProps {
 const { width } = Dimensions.get('window');
 
 const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, families, onBack, onUpdateVoucher, onDeleteVoucher }) => {
+  // Guard: Return early if voucher is undefined/null
+  if (!voucher || !voucher.id) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Icon name="chevron-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 16, color: '#64748b' }}>Gutschein nicht gefunden</Text>
+        </View>
+      </View>
+    );
+  }
+
   const [isEditing, setIsEditing] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
