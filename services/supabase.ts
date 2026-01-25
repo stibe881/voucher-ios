@@ -272,8 +272,12 @@ export const supabaseService = {
 
     if (fetchError) throw fetchError;
 
-    // Remove user from members array
-    const updatedMembers = (family.members || []).filter((m: any) => m.id !== userId);
+    // Get current user's email
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) throw new Error("User email not found");
+
+    // Remove user from members array by EMAIL (to match getFamilies logic)
+    const updatedMembers = (family.members || []).filter((m: any) => m.email?.toLowerCase() !== user.email.toLowerCase());
 
     // Update family with new members array
     const { error: updateError } = await supabase
