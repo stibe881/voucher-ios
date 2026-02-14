@@ -3,12 +3,14 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
 import { AppNotification } from '../types';
 import Icon from './Icon';
+import { useTranslation } from 'react-i18next';
 
 interface NotificationCenterProps {
   notifications: AppNotification[];
   onBack: () => void;
   onClearAll: () => void;
   onMarkAsRead: (id: string) => void;
+  onSelectNotification?: (n: AppNotification) => void; // New prop for deep link
   onAcceptInvite?: (inviteId: string) => Promise<void>;
   onRejectInvite?: (inviteId: string) => Promise<void>;
 }
@@ -18,9 +20,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onBack,
   onClearAll,
   onMarkAsRead,
+  onSelectNotification,
   onAcceptInvite,
   onRejectInvite
 }) => {
+  const { t } = useTranslation();
   const [processingInvite, setProcessingInvite] = useState<string | null>(null);
 
   const getIconForType = (type: string) => {
@@ -59,9 +63,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         <TouchableOpacity onPress={onBack} style={styles.circleBtn} activeOpacity={0.7}>
           <Icon name="chevron-back-outline" size={24} color="#4b5563" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Benachrichtigungen</Text>
+        <Text style={styles.headerTitle}>{t('notifications.title')}</Text>
         <TouchableOpacity onPress={onClearAll} style={styles.clearBtn} activeOpacity={0.7}>
-          <Text style={styles.clearBtnText}>Löschen</Text>
+          <Text style={styles.clearBtnText}>{t('notifications.clearAll')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -69,13 +73,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         {notifications.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="notifications-off-outline" size={80} color="#e2e8f0" />
-            <Text style={styles.emptyText}>Alles erledigt!</Text>
-            <Text style={styles.emptySubText}>Du hast zurzeit keine neuen Benachrichtigungen.</Text>
+            <Text style={styles.emptyText}>{t('notifications.emptyTitle')}</Text>
+            <Text style={styles.emptySubText}>{t('notifications.emptyMessage')}</Text>
           </View>
         ) : (
           notifications.map(item => {
             const icon = getIconForType(item.type);
-            const isInvitation = item.metadata?.invite_id;
+            const isInvitation = !!item.metadata?.invite_id;
             const isProcessing = processingInvite === item.metadata?.invite_id;
 
             return (
@@ -85,7 +89,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
               >
                 <TouchableOpacity
                   style={styles.cardContent}
-                  onPress={() => !isInvitation && onMarkAsRead(item.id)}
+                  onPress={() => {
+                    if (!isInvitation) {
+                      onMarkAsRead(item.id);
+                      if (onSelectNotification) onSelectNotification(item);
+                    }
+                  }}
                   activeOpacity={isInvitation ? 1 : 0.7}
                   disabled={isInvitation}
                 >
@@ -114,7 +123,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                       ) : (
                         <>
                           <Icon name="close-outline" size={18} color="#ef4444" />
-                          <Text style={styles.rejectBtnText}>Ablehnen</Text>
+                          <Text style={styles.rejectBtnText}>{t('notifications.decline')}</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -128,7 +137,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                       ) : (
                         <>
                           <Icon name="checkmark-outline" size={18} color="#fff" />
-                          <Text style={styles.acceptBtnText}>Annehmen</Text>
+                          <Text style={styles.acceptBtnText}>{t('notifications.accept')}</Text>
                         </>
                       )}
                     </TouchableOpacity>

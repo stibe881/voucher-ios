@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 interface NavigationProps {
@@ -9,15 +10,17 @@ interface NavigationProps {
 }
 
 const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.nav}>
       <TouchableOpacity style={styles.tab} onPress={() => setView('dashboard')}>
-        <Icon 
-          name={currentView === 'dashboard' ? 'ticket' : 'ticket-outline'} 
-          size={24} 
-          color={currentView === 'dashboard' ? '#2563eb' : '#9ca3af'} 
+        <Icon
+          name={currentView === 'dashboard' ? 'ticket' : 'ticket-outline'}
+          size={24}
+          color={currentView === 'dashboard' ? '#2563eb' : '#9ca3af'}
         />
-        <Text style={[styles.tabText, currentView === 'dashboard' && styles.activeText]}>Gutscheine</Text>
+        <Text style={[styles.tabText, currentView === 'dashboard' && styles.activeText]}>{t('navigation.vouchers')}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.addButton} onPress={() => setView('add')}>
@@ -25,12 +28,12 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.tab} onPress={() => setView('families')}>
-        <Icon 
-          name={currentView === 'families' ? 'person' : 'person-outline'} 
-          size={24} 
-          color={currentView === 'families' ? '#2563eb' : '#9ca3af'} 
+        <Icon
+          name={currentView === 'families' ? 'person' : 'person-outline'}
+          size={24}
+          color={currentView === 'families' ? '#2563eb' : '#9ca3af'}
         />
-        <Text style={[styles.tabText, currentView === 'families' && styles.activeText]}>Profil</Text>
+        <Text style={[styles.tabText, currentView === 'families' && styles.activeText]}>{t('navigation.profile')}</Text>
       </TouchableOpacity>
     </View>
   );

@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal, ScrollView } from 'react-native'; // Added Modal, ScrollView
+import { useTranslation } from 'react-i18next'; // Import i18n hook
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { supabaseService } from '../services/supabase';
 import Icon from './Icon';
+import { LANGUAGES } from '../i18n';
 
 interface LoginProps {
   onLogin: (email: string) => void;
@@ -13,6 +15,7 @@ interface LoginProps {
 const STORED_CREDENTIALS_KEY = 'vouchervault_credentials';
 
 const Login: React.FC<LoginProps> = () => {
+  const { t, i18n } = useTranslation();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +25,7 @@ const Login: React.FC<LoginProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [hasStoredCredentials, setHasStoredCredentials] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Check biometric availability and stored credentials on mount
   useEffect(() => {
@@ -46,8 +50,8 @@ const Login: React.FC<LoginProps> = () => {
   const handleBiometricLogin = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Anmelden mit Biometrie',
-        cancelLabel: 'Abbrechen',
+        promptMessage: t('login.loginWithBiometrics'),
+        cancelLabel: t('login.cancel'),
         disableDeviceFallback: false,
       });
 
@@ -60,14 +64,14 @@ const Login: React.FC<LoginProps> = () => {
         }
       }
     } catch (err: any) {
-      setError('Biometrie fehlgeschlagen');
+      setError(t('login.biometricFailed'));
       setLoading(false);
     }
   };
 
   const handleSubmit = async () => {
     if (!email || !password || (isRegister && (!firstName || !lastName))) {
-      setError('Bitte fülle alle Felder aus.');
+      setError(t('login.fillAllFields'));
       return;
     }
 
@@ -76,19 +80,22 @@ const Login: React.FC<LoginProps> = () => {
     try {
       if (isRegister) {
         const fullName = `${firstName.trim()} ${lastName.trim()}`;
+        // Pass language to signUp if supported, or update profile after
         await supabaseService.signUp(email, password, fullName);
+        // Note: Actual language saving to DB might happen in supabase.ts if we pass it, 
+        // or we can rely on client-side persistence for now.
       } else {
         await supabaseService.signIn(email, password);
 
         // After successful login, offer to enable biometric login
         if (biometricAvailable && !hasStoredCredentials) {
           Alert.alert(
-            'Biometrie aktivieren?',
-            'Möchtest du dich zukünftig mit Fingerabdruck anmelden?',
+            t('login.enableBiometrics'),
+            t('login.enableBiometricsPrompt'),
             [
-              { text: 'Nein', style: 'cancel' },
+              { text: t('login.no'), style: 'cancel' },
               {
-                text: 'Ja, aktivieren',
+                text: t('login.yesActivate'),
                 onPress: async () => {
                   await SecureStore.setItemAsync(
                     STORED_CREDENTIALS_KEY,
@@ -101,20 +108,33 @@ const Login: React.FC<LoginProps> = () => {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Ein Fehler ist aufgetreten.');
+      setError(err.message || t('login.errorOccurred'));
       setLoading(false);
     }
   };
 
+  const changeLanguage = (langCode: string) => {
+    i18n.changeLanguage(langCode);
+    setShowLanguageModal(false);
+  };
+
+  const currentLanguageLabel = LANGUAGES.find(l => l.code === i18n.language)?.label || 'Deutsch';
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <View style={styles.inner}>
+        {/* Language Selector Button */}
+        <TouchableOpacity style={styles.languageButton} onPress={() => setShowLanguageModal(true)}>
+          <Icon name="globe-outline" size={20} color="#6b7280" />
+          <Text style={styles.languageButtonText}>{currentLanguageLabel}</Text>
+        </TouchableOpacity>
+
         <View style={styles.logoContainer}>
           <View style={styles.logo}>
             <Icon name="ticket" size={32} color="#fff" />
           </View>
-          <Text style={styles.title}>{isRegister ? 'Konto erstellen' : 'Willkommen zurück'}</Text>
-          <Text style={styles.subtitle}>Deine Gutscheine sicher in der Cloud.</Text>
+          <Text style={styles.title}>{isRegister ? t('login.createAccount') : t('login.welcomeBack')}</Text>
+          <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
@@ -126,14 +146,14 @@ const Login: React.FC<LoginProps> = () => {
               disabled={loading}
             >
               <Icon name="finger-print-outline" size={28} color="#2563eb" />
-              <Text style={styles.faceIdButtonText}>Mit Biometrie anmelden</Text>
+              <Text style={styles.faceIdButtonText}>{t('login.loginWithBiometricsBtn')}</Text>
             </TouchableOpacity>
           )}
 
           {!isRegister && hasStoredCredentials && biometricAvailable && (
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>oder</Text>
+              <Text style={styles.dividerText}>{t('login.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
           )}
@@ -141,17 +161,17 @@ const Login: React.FC<LoginProps> = () => {
           {isRegister && (
             <View style={styles.row}>
               <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.label}>Vorname</Text>
+                <Text style={styles.label}>{t('login.firstName')}</Text>
                 <TextInput style={styles.input} placeholder="Max" placeholderTextColor="#9ca3af" value={firstName} onChangeText={setFirstName} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Nachname</Text>
+                <Text style={styles.label}>{t('login.lastName')}</Text>
                 <TextInput style={styles.input} placeholder="Mustermann" placeholderTextColor="#9ca3af" value={lastName} onChangeText={setLastName} />
               </View>
             </View>
           )}
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('login.email')}</Text>
           <TextInput
             style={styles.input}
             placeholder="beispiel@email.ch"
@@ -162,7 +182,7 @@ const Login: React.FC<LoginProps> = () => {
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Passwort</Text>
+          <Text style={styles.label}>{t('login.password')}</Text>
           <TextInput
             style={styles.input}
             placeholder="••••••••"
@@ -179,16 +199,41 @@ const Login: React.FC<LoginProps> = () => {
             onPress={handleSubmit}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{isRegister ? 'Jetzt registrieren' : 'Anmelden'}</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{isRegister ? t('login.registerNow') : t('login.login')}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.toggleMode} onPress={() => setIsRegister(!isRegister)}>
             <Text style={styles.toggleModeText}>
-              {isRegister ? 'Bereits ein Konto? Hier anmelden' : 'Noch kein Konto? Jetzt registrieren'}
+              {isRegister ? t('login.haveAccount') : t('login.noAccount')}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Language Modal */}
+      <Modal visible={showLanguageModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('login.language')}</Text>
+            <ScrollView>
+              {LANGUAGES.map((lang) => (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[styles.langItem, i18n.language === lang.code && styles.langItemActive]}
+                  onPress={() => changeLanguage(lang.code)}
+                >
+                  <Text style={[styles.langText, i18n.language === lang.code && styles.langTextActive]}>{lang.label}</Text>
+                  {i18n.language === lang.code && <Icon name="checkmark" size={20} color="#2563eb" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowLanguageModal(false)}>
+              <Text style={styles.modalCloseText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 };
@@ -225,7 +270,22 @@ const styles = StyleSheet.create({
   faceIdButtonText: { color: '#2563eb', fontSize: 17, fontWeight: '700' },
   divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
-  dividerText: { color: '#9ca3af', fontSize: 13, marginHorizontal: 12 }
+  dividerText: { color: '#9ca3af', fontSize: 13, marginHorizontal: 12 },
+
+  // Language Selector Styles
+  languageButton: { position: 'absolute', top: 60, right: 30, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+  languageButtonText: { marginLeft: 6, fontSize: 14, fontWeight: '600', color: '#374151' },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', width: '100%', maxWidth: 320, borderRadius: 24, padding: 20, maxHeight: 500 },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16, textAlign: 'center', color: '#111827' },
+  langItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  langItemActive: { backgroundColor: '#eff6ff', marginHorizontal: -20, paddingHorizontal: 20 },
+  langText: { fontSize: 16, color: '#374151', fontWeight: '500' },
+  langTextActive: { color: '#2563eb', fontWeight: '700' },
+  modalCloseBtn: { marginTop: 20, alignItems: 'center', padding: 10 },
+  modalCloseText: { color: '#6b7280', fontSize: 16, fontWeight: '600' }
 });
 
 export default Login;

@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import i18n from '../i18n';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -15,7 +16,7 @@ Notifications.setNotificationHandler({
 });
 
 export interface NotificationData {
-    type: 'voucher_expiry' | 'family_invitation' | 'invitation_accepted' | 'invitation_rejected';
+    type: 'voucher_expiry' | 'family_invitation' | 'invitation_accepted' | 'invitation_rejected' | 'voucher_new' | 'voucher_transfer';
     voucherId?: string;
     familyId?: string;
     message?: string;
@@ -93,8 +94,8 @@ export async function scheduleExpiryNotifications(voucherId: string, voucherTitl
 
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: `Gutschein läuft ${days === 1 ? 'morgen' : `in ${days} Tagen`} ab`,
-                    body: `${voucherTitle} - Nicht vergessen einzulösen!`,
+                    title: days === 1 ? i18n.t('pushNotif.expiryTitle_one') : i18n.t('pushNotif.expiryTitle_other', { count: days }),
+                    body: i18n.t('pushNotif.expiryBody', { voucher: voucherTitle }),
                     data: { type: 'voucher_expiry', voucherId },
                     sound: true,
                 },
@@ -191,12 +192,12 @@ export async function sendInviteResponseNotification(
     if (!inviterPushToken) return;
 
     const title = response === 'accepted'
-        ? 'Einladung angenommen! 🎉'
-        : 'Einladung abgelehnt';
+        ? i18n.t('pushNotif.inviteAcceptedTitle')
+        : i18n.t('pushNotif.inviteRejectedTitle');
 
     const body = response === 'accepted'
-        ? `${inviteeName} ist jetzt Mitglied von "${familyName}"`
-        : `${inviteeName} hat die Einladung zu "${familyName}" abgelehnt`;
+        ? i18n.t('pushNotif.inviteAcceptedBody', { name: inviteeName, group: familyName })
+        : i18n.t('pushNotif.inviteRejectedBody', { name: inviteeName, group: familyName });
 
     await sendPushNotification(inviterPushToken, title, body, {
         type: response === 'accepted' ? 'invitation_accepted' : 'invitation_rejected',

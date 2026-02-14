@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import i18n from '../i18n';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Voucher, Family, User, AppNotification, FamilyInvite, Trip } from '../types';
 
@@ -129,10 +130,77 @@ export const supabaseService = {
     if (!isUUID(payload.family_id)) payload.family_id = null;
     // trip_id sollte number oder null sein
     if (!payload.trip_id) payload.trip_id = null;
+    if (!payload.min_order_value) payload.min_order_value = null;
 
     const { data, error } = await supabase.from('vouchers').insert([payload]).select();
     if (error) throw error;
-    return data[0] as Voucher;
+
+    const newVoucher = data[0] as Voucher;
+
+    // Send Push Notifications to Family Members
+    if (payload.family_id) {
+      // Run in background / don't await to keep UI fast
+      (async () => {
+        try {
+          const { data: family } = await supabase.from('families').select('members, name').eq('id', payload.family_id).single();
+          if (family && family.members) {
+            const currentUser = await supabase.auth.getUser();
+            const currentUserId = currentUser.data.user?.id;
+            const currentUserName = payload.user_id ? 'Jemand' : 'Jemand'; // Fallback logic, ideally we have name
+
+            // Filter out current user from recipients
+            const recipients = family.members.filter((m: any) => m.id !== currentUserId && m.id !== payload.user_id);
+
+            if (recipients.length > 0) {
+              // Fetch profiles for tokens
+              const recipientIds = recipients.map((r: any) => r.id);
+              const { data: profiles } = await supabase.from('profiles').select('id, push_token, notification_preferences').in('id', recipientIds);
+
+              if (profiles && profiles.length > 0) {
+                const { sendPushNotification } = await import('./notifications');
+                const title = i18n.t('pushNotif.newVoucherTitle', { group: family.name });
+                const body = i18n.t('pushNotif.newVoucherBody', { voucher: payload.title });
+
+                // Parallel processing for notifications
+                await Promise.all(profiles.map(async (profile: any) => {
+                  try {
+                    // Check per-type notification preference
+                    const prefs = profile.notification_preferences;
+                    const wantsVoucherNew = !prefs || prefs.voucher_new !== false;
+
+                    // 1. Database Notification (always saved)
+                    await supabaseService.saveNotification(profile.id, {
+                      title,
+                      body,
+                      type: 'info',
+                      metadata: {
+                        voucher_id: newVoucher.id,
+                        family_id: payload.family_id
+                      }
+                    });
+
+                    // 2. Push Notification (only if preference enabled)
+                    if (profile.push_token && wantsVoucherNew) {
+                      await sendPushNotification(profile.push_token, title, body, {
+                        type: 'voucher_new',
+                        voucherId: newVoucher.id,
+                        familyId: payload.family_id
+                      });
+                    }
+                  } catch (innerErr) {
+                    console.error("Error notifying profile:", profile.id, innerErr);
+                  }
+                }));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error sending family push notifications:", e);
+        }
+      })();
+    }
+
+    return newVoucher;
   },
 
   updateVoucher: async (voucher: Voucher) => {
@@ -142,6 +210,7 @@ export const supabaseService = {
     // Datenbereinigung vor dem Senden an Supabase
     if (!isUUID(updateFields.family_id)) (updateFields as any).family_id = null;
     if (!updateFields.trip_id) (updateFields as any).trip_id = null;
+    if (!(updateFields as any).min_order_value) (updateFields as any).min_order_value = null;
 
     const { data, error } = await supabase.from('vouchers').update(updateFields).eq('id', id).select();
     if (error) {
@@ -152,6 +221,60 @@ export const supabaseService = {
       throw new Error("Voucher update returned no data");
     }
     return data[0] as Voucher;
+  },
+
+  transferVoucher: async (voucherId: string, targetEmail: string) => {
+    // 1. Check if target user exists
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, push_token')
+      .eq('email', targetEmail.toLowerCase().trim())
+      .single();
+
+    if (profileError || !profiles) throw new Error('Empfänger nicht gefunden');
+
+    const { data: voucher, error: fetchError } = await supabase
+      .from('vouchers')
+      .select('title')
+      .eq('id', voucherId)
+      .single();
+
+    // 2. Update voucher ownership
+    const { error: updateError } = await supabase
+      .from('vouchers')
+      .update({
+        user_id: profiles.id,
+        family_id: null // Reset family (make it private for new owner initially)
+      })
+      .eq('id', voucherId);
+
+    if (updateError) throw updateError;
+
+    // 3. Notify new owner
+    try {
+      const { sendPushNotification } = await import('./notifications');
+      const title = i18n.t('pushNotif.transferTitle');
+      const body = i18n.t('pushNotif.transferBody', { voucher: voucher?.title || i18n.t('pushNotif.unknown') });
+
+      // Database notification (always saved)
+      await supabaseService.saveNotification(profiles.id, {
+        title,
+        body,
+        type: 'info'
+      });
+
+      // Push notification (check preference)
+      const prefs = (profiles as any).notification_preferences;
+      const wantsTransfer = !prefs || prefs.voucher_transfer !== false;
+      if (profiles.push_token && wantsTransfer) {
+        await sendPushNotification(profiles.push_token, title, body, {
+          type: 'voucher_transfer',
+          voucherId: voucherId
+        });
+      }
+    } catch (e) {
+      console.error("Error sending transfer notification:", e);
+    }
   },
 
   deleteVoucher: async (voucherId: string, imageUrl?: string | null, imageUrl2?: string | null) => {
@@ -284,7 +407,10 @@ export const supabaseService = {
       id: user.id,
       name: user.name,
       email: user.email,
-      notifications_enabled: user.notifications_enabled
+      push_token: user.push_token,
+      notifications_enabled: user.notifications_enabled,
+      notification_preferences: user.notification_preferences || null,
+      language: user.language
     });
   },
 
@@ -406,7 +532,7 @@ export const supabaseService = {
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, push_token')
+        .select('id, push_token, notification_preferences')
         .eq('email', inviteeEmail.toLowerCase().trim())
         .maybeSingle(); // Use maybeSingle to avoid 406 if multiple (shouldn't happen) or RLS issues
 
@@ -415,11 +541,11 @@ export const supabaseService = {
       }
 
       if (profile) {
-        console.log('[createInvite] Found profile:', profile.id);
-        const title = 'Einladung erhalten';
-        const body = `${inviterName || 'Jemand'} hat dich zur Gruppe "${familyName}" eingeladen.`;
+        console.log('[createInvite] Profile found for invitee:', profile.id);
+        const title = i18n.t('pushNotif.inviteTitle');
+        const body = i18n.t('pushNotif.inviteBody', { name: inviterName || i18n.t('pushNotif.someone'), group: familyName });
 
-        // 1. In-App Notification
+        // 1. In-App Notification (always saved)
         await supabaseService.saveNotification(profile.id, {
           title,
           body,
@@ -427,10 +553,12 @@ export const supabaseService = {
         });
         console.log('[createInvite] In-App Notification saved');
 
-        // 2. Push Notification
-        if (profile.push_token) {
+        // 2. Push Notification (check preference)
+        const prefs = (profile as any).notification_preferences;
+        const wantsInvitation = !prefs || prefs.family_invitation !== false;
+        if (profile.push_token && wantsInvitation) {
           console.log('[createInvite] Sending Push to:', profile.push_token);
-          const { sendPushNotification } = await import('./notifications'); // Dynamic import to avoid cycles if any
+          const { sendPushNotification } = await import('./notifications');
           await sendPushNotification(profile.push_token, title, body, {
             type: 'family_invitation',
             familyId,
@@ -438,7 +566,7 @@ export const supabaseService = {
           });
           console.log('[createInvite] Push sent');
         } else {
-          console.log('[createInvite] No push token for user');
+          console.log('[createInvite] Push skipped (no token or preference disabled)');
         }
       } else {
         console.log('[createInvite] No profile found for email (user might not be registered yet).');
@@ -540,15 +668,15 @@ export const supabaseService = {
     return data as FamilyInvite | null;
   },
 
-  getInviterPushToken: async (inviterId: string): Promise<string | null> => {
+  getInviterPushToken: async (inviterId: string): Promise<{ push_token: string | null, notification_preferences: any } | null> => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('push_token')
+      .select('push_token, notification_preferences')
       .eq('id', inviterId)
       .single();
 
     if (error || !data) return null;
-    return data.push_token;
+    return { push_token: data.push_token, notification_preferences: data.notification_preferences };
   },
 
   addMemberToFamily: async (familyId: string, userEmail: string, userName: string) => {

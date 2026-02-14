@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Alert, Modal, Dimensions, Linking, Share, Platform } from 'react-native';
 
@@ -5,6 +6,8 @@ import { Voucher, User, Family, Redemption, Trip } from '../types';
 import Icon from './Icon';
 import { supabaseService } from '../services/supabase'; // Import Service
 import TripSelectionModal from './TripSelectionModal';
+import { useTranslation } from 'react-i18next';
+import { CURRENCIES, getCurrencySymbol } from './AddVoucher';
 
 interface VoucherDetailProps {
   voucher: Voucher;
@@ -19,6 +22,8 @@ interface VoucherDetailProps {
 const { width } = Dimensions.get('window');
 
 const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, families, onBack, onUpdateVoucher, onDeleteVoucher }) => {
+  const { t, i18n } = useTranslation();
+
   // Guard: Return early if voucher is undefined/null
   if (!voucher || !voucher.id) {
     return (
@@ -29,7 +34,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 16, color: '#64748b' }}>Gutschein nicht gefunden</Text>
+          <Text style={{ fontSize: 16, color: '#64748b' }}>{t('voucherDetail.voucherNotFound')}</Text>
         </View>
       </View>
     );
@@ -74,11 +79,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           await Linking.openURL(url);
         } catch (e) {
           Alert.alert(
-            "AusflugFinder nicht installiert",
-            "Möchtest du die App installieren?",
+            t('voucherDetail.tripAppNotInstalled'),
+            t('voucherDetail.installAppPrompt'),
             [
-              { text: "Nein", style: "cancel" },
-              { text: "Ja", onPress: () => Linking.openURL(storeUrl) }
+              { text: t('common.no'), style: "cancel" },
+              { text: t('common.yes'), onPress: () => Linking.openURL(storeUrl) }
             ]
           );
         }
@@ -87,11 +92,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       console.error(err);
       // Final Catch
       Alert.alert(
-        "AusflugFinder nicht installiert",
-        "Möchtest du die App installieren?",
+        t('voucherDetail.tripAppNotInstalled'),
+        t('voucherDetail.installAppPrompt'),
         [
-          { text: "Nein", style: "cancel" },
-          { text: "Ja", onPress: () => Linking.openURL(storeUrl) }
+          { text: t('common.no'), style: "cancel" },
+          { text: t('common.yes'), onPress: () => Linking.openURL(storeUrl) }
         ]
       );
     }
@@ -102,8 +107,10 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
   const [editStore, setEditStore] = useState(voucher.store || '');
   const [editAmount, setEditAmount] = useState(voucher.remaining_amount?.toString() || '0');
   const [editCurrency, setEditCurrency] = useState(voucher.currency || 'CHF');
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [editCode, setEditCode] = useState(voucher.code || '');
   const [editPin, setEditPin] = useState(voucher.pin || '');
+  const [editMinOrderValue, setEditMinOrderValue] = useState(voucher.min_order_value ? voucher.min_order_value.toString() : '');
   const [editExpiry, setEditExpiry] = useState('');
   const [editWebsite, setEditWebsite] = useState(voucher.website || '');
   const [editType, setEditType] = useState(voucher.type || 'VALUE');
@@ -167,18 +174,17 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       const deepLink = `vouchervault://voucher/${voucher.id}`;
       const appStoreLink = "https://apps.apple.com/app/id6758004270";
 
-      const message = [
-        `Gutschein: ${voucher.title}`,
-        `Geschäft: ${voucher.store}`,
-        `Betrag: ${remaining.toFixed(2)} ${voucher.currency}`,
-        voucher.code ? `Code: ${voucher.code}` : '',
-        voucher.pin ? `PIN: ${voucher.pin}` : '',
-        voucher.expiry_date ? `Gültig bis: ${displayDateDE(voucher.expiry_date)}` : '',
-        voucher.website ? `${voucher.website}` : '',
-        voucher.notes ? `Notizen: ${voucher.notes}` : '',
-        '',
-        `App laden: ${appStoreLink}`
-      ].filter(Boolean).join('\n');
+      const message = t('voucherDetail.shareMessage', {
+        title: voucher.title,
+        store: voucher.store,
+        amount: `${remaining.toFixed(2)} ${getCurrencySymbol(voucher.currency)}`,
+        code: voucher.code ? `Code: ${voucher.code}` : '',
+        pin: voucher.pin ? `PIN: ${voucher.pin}` : '',
+        expiry: voucher.expiry_date ? `${t('voucherDetail.label.expiryDateCap')}: ${displayDateDE(voucher.expiry_date)}` : '',
+        website: voucher.website ? `${voucher.website}` : '',
+        notes: voucher.notes ? `${t('voucherDetail.label.notes')}: ${voucher.notes}` : '',
+        link: appStoreLink
+      }).replace(/\n\n+/g, '\n').trim();
 
       await Share.share({
         message,
@@ -200,17 +206,17 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       if (supported) {
         await Linking.openURL(finalUrl);
       } else {
-        Alert.alert("Fehler", "Kann diese URL nicht öffnen: " + finalUrl);
+        Alert.alert(t('common.error'), finalUrl);
       }
     } catch (err) {
       console.error(err);
-      Alert.alert("Fehler", "Link konnte nicht geöffnet werden.");
+      Alert.alert(t('common.error'), url);
     }
   };
 
   const handleSaveEdit = async () => {
     if (!editTitle.trim() || !editStore.trim()) {
-      Alert.alert("Fehler", "Titel und Geschäft dürfen nicht leer sein.");
+      Alert.alert(t('common.error'), t('voucherDetail.error.titleStoreRequired'));
       return;
     }
     setIsProcessing(true);
@@ -225,6 +231,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
         pin: editPin.trim(),
         expiry_date: convertDateToISO(editExpiry),
         website: editWebsite.trim(),
+        min_order_value: editMinOrderValue ? parseFloat(editMinOrderValue.replace(',', '.')) : null,
         type: editType,
         family_id: editFamilyId,
         notes: editNotes.trim(),
@@ -233,7 +240,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       });
       setIsEditing(false);
     } catch (err: any) {
-      Alert.alert("Fehler", "Speichern fehlgeschlagen.");
+      Alert.alert(t('common.error'), t('voucherDetail.error.saveFailed'));
     } finally {
       setIsProcessing(false);
     }
@@ -243,7 +250,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
     // Handle code pool vouchers
     if (voucher.code_pool && voucher.code_pool.length > 0) {
       if (!selectedCodeForRedeem) {
-        Alert.alert("Fehler", "Bitte wähle einen Code zum Einlösen.");
+        Alert.alert(t('common.error'), t('voucherDetail.error.selectCode'));
         return;
       }
 
@@ -275,7 +282,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           history: [newHistoryEntry, ...(voucher.history || [])]
         });
       } catch (err: any) {
-        Alert.alert("Fehler", "Update fehlgeschlagen.");
+        Alert.alert(t('common.error'), t('voucherDetail.error.updateFailed'));
       } finally {
         setIsProcessing(false);
         setSelectedCodeForRedeem(null);
@@ -286,11 +293,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
     // Regular redemption (non-code-pool)
     const val = parseFloat(redeemInput.replace(',', '.'));
     if (isNaN(val) || val <= 0) {
-      Alert.alert("Fehler", "Bitte einen gültigen Betrag eingeben.");
+      Alert.alert(t('common.error'), t('voucherDetail.error.invalidAmount'));
       return;
     }
     if (val > remaining) {
-      Alert.alert("Fehler", "Der Betrag ist höher als das Restguthaben.");
+      Alert.alert(t('common.error'), t('voucherDetail.error.amountTooHigh'));
       return;
     }
 
@@ -313,7 +320,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
         history: [newHistoryEntry, ...(voucher.history || [])]
       });
     } catch (err: any) {
-      Alert.alert("Fehler", "Update fehlgeschlagen.");
+      Alert.alert(t('common.error'), t('voucherDetail.error.updateFailed'));
     } finally {
       setIsProcessing(false);
       setRedeemInput('');
@@ -335,29 +342,32 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setIsEditing(false)} style={styles.circleBtn}><Icon name="close-outline" size={24} color="#4b5563" /></TouchableOpacity>
-          <Text style={styles.headerTitle}>Bearbeiten</Text>
+          <Text style={styles.headerTitle}>{t('voucherDetail.edit')}</Text>
           <TouchableOpacity onPress={handleSaveEdit} style={styles.saveHeaderBtn} disabled={isProcessing}>
-            {isProcessing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText}>OK</Text>}
+            {isProcessing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText}>{t('common.save')}</Text>}
           </TouchableOpacity>
         </View>
 
         {/* EDIT FORM - Keep existing form logic */}
         <ScrollView contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.inputGroup}><Text style={styles.label}>Bezeichnung</Text><TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} placeholder="z.B. Shopping Gutschein" /></View>
-          <View style={styles.inputGroup}><Text style={styles.label}>Geschäft</Text><TextInput style={styles.input} value={editStore} onChangeText={setEditStore} placeholder="z.B. Zalando" /></View>
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.title')}</Text><TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} placeholder={t('voucherDetail.placeholder.title')} /></View>
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.store')}</Text><TextInput style={styles.input} value={editStore} onChangeText={setEditStore} placeholder={t('voucherDetail.placeholder.store')} /></View>
           <View style={styles.row}>
-            <View style={{ flex: 1, marginRight: editType === 'VALUE' ? 12 : 0 }}><Text style={styles.label}>{editType === 'VALUE' ? 'Restbetrag' : 'Restanzahl'}</Text><TextInput style={styles.input} value={editAmount} onChangeText={setEditAmount} keyboardType="numeric" /></View>
+            <View style={{ flex: 1, marginRight: editType === 'VALUE' ? 12 : 0 }}><Text style={styles.label}>{editType === 'VALUE' ? t('voucherDetail.label.remainingAmount') : t('voucherDetail.label.remainingQuantity')}</Text><TextInput style={styles.input} value={editAmount} onChangeText={setEditAmount} keyboardType="numeric" /></View>
             {editType === 'VALUE' && (
-              <View style={{ flex: 1 }}><Text style={styles.label}>Währung</Text><TextInput style={styles.input} value={editCurrency} onChangeText={setEditCurrency} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.label}>{t('voucherDetail.label.currency')}</Text><TouchableOpacity style={styles.input} onPress={() => setShowCurrencyPicker(true)}><Text style={{ fontSize: 15, color: '#1e293b' }}>{editCurrency} {getCurrencySymbol(editCurrency) !== editCurrency ? getCurrencySymbol(editCurrency) : ''}</Text></TouchableOpacity></View>
             )}
           </View>
-          <View style={styles.inputGroup}><Text style={styles.label}>Ablaufdatum (TT.MM.JJJJ)</Text><TextInput style={styles.input} value={editExpiry} onChangeText={(t) => setEditExpiry(formatDate(t))} maxLength={10} keyboardType="numeric" placeholder="31.12.2025" /></View>
-          <View style={styles.inputGroup}><Text style={styles.label}>Gutscheinnummer</Text><TextInput style={styles.input} value={editCode} onChangeText={setEditCode} placeholder="Gutschein-Code" /></View>
-          <View style={styles.inputGroup}><Text style={styles.label}>PIN</Text><TextInput style={styles.input} value={editPin} onChangeText={setEditPin} placeholder="PIN-Code" /></View>
-          <View style={styles.inputGroup}><Text style={styles.label}>Webseite</Text><TextInput style={styles.input} value={editWebsite} onChangeText={setEditWebsite} placeholder="https://example.com" autoCapitalize="none" keyboardType="url" /></View>
+          {editType === 'VALUE' && (
+            <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.minOrderValue')}</Text><TextInput style={styles.input} value={editMinOrderValue} onChangeText={setEditMinOrderValue} keyboardType="numeric" placeholder="0.00" /></View>
+          )}
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.expiryDate')}</Text><TextInput style={styles.input} value={editExpiry} onChangeText={(t) => setEditExpiry(formatDate(t))} maxLength={10} keyboardType="numeric" placeholder="31.12.2025" /></View>
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.voucherCode')}</Text><TextInput style={styles.input} value={editCode} onChangeText={setEditCode} placeholder="Gutschein-Code" /></View>
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.pin')}</Text><TextInput style={styles.input} value={editPin} onChangeText={setEditPin} placeholder="PIN-Code" /></View>
+          <View style={styles.inputGroup}><Text style={styles.label}>{t('voucherDetail.label.website')}</Text><TextInput style={styles.input} value={editWebsite} onChangeText={setEditWebsite} placeholder="https://example.com" autoCapitalize="none" keyboardType="url" /></View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Kategorie</Text>
+            <Text style={styles.label}>{t('voucherDetail.label.category')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Gastro', 'Sonstiges'].map(cat => (
                 <TouchableOpacity
@@ -365,29 +375,29 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                   style={[styles.familyItem, editCategory === cat && styles.familyItemActive]}
                   onPress={() => setEditCategory(cat)}
                 >
-                  <Text style={[styles.familyItemText, editCategory === cat && styles.familyItemTextActive]}>{cat}</Text>
+                  <Text style={[styles.familyItemText, editCategory === cat && styles.familyItemTextActive]}>{t(`categories.${cat}`)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Gutscheintyp</Text>
+            <Text style={styles.label}>{t('voucherDetail.label.voucherType')}</Text>
             <View style={styles.familySelect}>
               <TouchableOpacity style={[styles.familyItem, editType === 'VALUE' && styles.familyItemActive]} onPress={() => setEditType('VALUE')}>
-                <Text style={[styles.familyItemText, editType === 'VALUE' && styles.familyItemTextActive]}>Wert-Gutschein</Text>
+                <Text style={[styles.familyItemText, editType === 'VALUE' && styles.familyItemTextActive]}>{t('voucherDetail.label.valueVoucher')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.familyItem, editType === 'QUANTITY' && styles.familyItemActive]} onPress={() => setEditType('QUANTITY')}>
-                <Text style={[styles.familyItemText, editType === 'QUANTITY' && styles.familyItemTextActive]}>Anzahl-Gutschein</Text>
+                <Text style={[styles.familyItemText, editType === 'QUANTITY' && styles.familyItemTextActive]}>{t('voucherDetail.label.quantityVoucher')}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Teilen mit Gruppe</Text>
+            <Text style={styles.label}>{t('voucherDetail.label.shareWithGroup')}</Text>
             <View style={styles.familySelect}>
               <TouchableOpacity style={[styles.familyItem, editFamilyId === null && styles.familyItemActive]} onPress={() => setEditFamilyId(null)}>
-                <Text style={[styles.familyItemText, editFamilyId === null && styles.familyItemTextActive]}>Privat</Text>
+                <Text style={[styles.familyItemText, editFamilyId === null && styles.familyItemTextActive]}>{t('common.private')}</Text>
               </TouchableOpacity>
               {families.map(f => (
                 <TouchableOpacity key={f.id} style={[styles.familyItem, editFamilyId === f.id && styles.familyItemActive]} onPress={() => setEditFamilyId(f.id)}>
@@ -398,13 +408,13 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ausflug verknüpfen</Text>
+            <Text style={styles.label}>{t('voucherDetail.label.linkTrip')}</Text>
             <TouchableOpacity
               style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
               onPress={() => setShowTripModal(true)}
             >
               <Text style={{ color: editTripId ? '#1e293b' : '#94a3b8', fontSize: 16 }}>
-                {editTripId ? allTrips.find(t => t.id === editTripId)?.title : 'Ausflug wählen...'}
+                {editTripId ? allTrips.find(t => t.id === editTripId)?.title : t('voucherDetail.label.selectTrip')}
               </Text>
               <Icon name="chevron-down" size={20} color="#94a3b8" />
             </TouchableOpacity>
@@ -419,12 +429,12 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Notizen</Text>
+            <Text style={styles.label}>{t('voucherDetail.label.notes')}</Text>
             <TextInput
               style={[styles.input, { height: 100, textAlignVertical: 'top', paddingTop: 15 }]}
               value={editNotes}
               onChangeText={setEditNotes}
-              placeholder="Notizen zum Gutschein..."
+              placeholder={t('voucherDetail.placeholder.notes')}
               multiline
             />
           </View>
@@ -433,20 +443,90 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
     );
   }
 
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferEmail, setTransferEmail] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const handleTransfer = async () => {
+    if (!transferEmail.trim()) {
+      alert(t('voucherDetail.error.enterEmail'));
+      return;
+    }
+
+    setIsTransferring(true);
+    try {
+      await supabaseService.transferVoucher(voucher.id, transferEmail.trim());
+      alert(t('voucherDetail.transferSuccess'));
+      setShowTransferModal(false);
+      onBack(); // Close detail view as voucher is gone/moved
+    } catch (e: any) {
+      alert(t('voucherDetail.transferError') + (e.message || t('app.unknownError')));
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.circleBtn}><Icon name="chevron-back-outline" size={24} color="#4b5563" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Gutschein Details</Text>
+        <Text style={styles.headerTitle}>{t('voucherDetail.title')}</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity style={styles.circleBtn} onPress={handleShare}>
             <Icon name="share-outline" size={24} color="#0f172a" />
           </TouchableOpacity>
+          {!isEditing && (
+            <TouchableOpacity onPress={() => setShowTransferModal(true)} style={[styles.circleBtn, { backgroundColor: '#eff6ff' }]}>
+              <Icon name="paper-plane" size={20} color="#2563eb" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.circleBtn} onPress={() => setIsEditing(true)}>
             <Icon name="create-outline" size={24} color="#2563eb" />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Transfer Modal */}
+      <Modal visible={showTransferModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>{t('voucherDetail.transferTitle')}</Text>
+            <Text style={{ color: '#4b5563', marginBottom: 20, textAlign: 'center' }}>
+              {t('voucherDetail.transferDescription')}
+            </Text>
+
+            <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 5, color: '#374151' }}>{t('voucherDetail.label.recipientEmail')}</Text>
+            <TextInput
+              style={{ height: 50, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 20 }}
+              value={transferEmail}
+              onChangeText={setTransferEmail}
+              placeholder="email@beispiel.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowTransferModal(false)}
+                style={{ flex: 1, height: 44, backgroundColor: '#f3f4f6', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Text style={{ fontWeight: '600', color: '#4b5563' }}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleTransfer}
+                disabled={isTransferring}
+                style={{ flex: 1, height: 44, backgroundColor: '#2563eb', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
+              >
+                {isTransferring ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={{ fontWeight: '600', color: 'white' }}>{t('voucherDetail.transfer')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.hero}>
@@ -500,14 +580,14 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
               <Text style={styles.voucherTitle}>{voucher.title}</Text>
             </View>
             <View style={styles.ownerBadge}>
-              <Text style={styles.ownerText}>Von: {owner?.name || 'Unbekannt'}</Text>
+              <Text style={styles.ownerText}>{t('voucherDetail.from')} {owner?.name || t('settings.unknown')}</Text>
             </View>
           </View>
 
           <View style={styles.balanceContainer}>
             <View style={styles.balanceRow}>
-              <Text style={styles.balanceValue}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.balanceCurrency}> {voucher.type === 'QUANTITY' ? 'Stk.' : voucher.currency}</Text></Text>
-              <Text style={styles.initialText}>von {voucher.type === 'QUANTITY' ? Math.floor(Number(voucher.initial_amount || 0)) : Number(voucher.initial_amount || 0).toFixed(2)} {voucher.type === 'QUANTITY' ? 'Stk.' : ''}</Text>
+              <Text style={styles.balanceValue}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.balanceCurrency}> {voucher.type === 'QUANTITY' ? t('dashboard.pcs') : getCurrencySymbol(voucher.currency)}</Text></Text>
+              <Text style={styles.initialText}>von {voucher.type === 'QUANTITY' ? Math.floor(Number(voucher.initial_amount || 0)) : Number(voucher.initial_amount || 0).toFixed(2)} {voucher.type === 'QUANTITY' ? t('dashboard.pcs') : ''}</Text>
             </View>
             <View style={styles.progressBarContainer}>
               <View style={[styles.progressBar, { width: `${progress}%`, backgroundColor: progress < 20 ? '#ef4444' : '#2563eb' }]} />
@@ -516,11 +596,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
 
           <View style={styles.infoGrid}>
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>NUMMER</Text>
+              <Text style={styles.infoLabel}>{t('voucherDetail.label.number')}</Text>
               <Text style={styles.infoValue} numberOfLines={1}>{voucher.code || '–'}</Text>
             </View>
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>PIN</Text>
+              <Text style={styles.infoLabel}>{t('voucherDetail.label.pin')}</Text>
               <View style={styles.pinContainer}>
                 <Text style={styles.infoValue}>{showPin ? (voucher.pin || '–') : (voucher.pin ? '••••' : '–')}</Text>
                 {voucher.pin && (
@@ -531,12 +611,26 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
               </View>
             </View>
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>ABLAUFDATUM</Text>
-              <Text style={[styles.infoValue, { color: '#2563eb' }]}>{displayDateDE(voucher.expiry_date) || 'Unbegrenzt'}</Text>
+              <Text style={styles.infoLabel}>{t('voucherDetail.label.expiryDateCap')}</Text>
+              <Text style={[styles.infoValue, { color: '#2563eb' }]}>{displayDateDE(voucher.expiry_date) || t('dashboard.unlimited')}</Text>
             </View>
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>GETEILT</Text>
-              <Text style={styles.infoValue}>{family?.name || 'Privat'}</Text>
+              <Text style={styles.infoLabel}>{t('voucherDetail.label.category')}</Text>
+              <Text style={styles.infoValue}>{t(`categories.${voucher.category || 'Sonstiges'}`, voucher.category)}</Text>
+            </View>
+
+            {/* Min Order Value Display */}
+            {voucher.type === 'VALUE' && voucher.min_order_value && (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoLabel}>{t('voucherDetail.label.minOrderValue')}</Text>
+                <Text style={styles.infoValue}>
+                  {voucher.currency === 'x' ? '' : getCurrencySymbol(voucher.currency)} {voucher.min_order_value.toFixed(2)}
+                </Text>
+              </View>
+            )}
+            <View style={styles.infoBox}>
+              <Text style={styles.infoLabel}>{t('voucherDetail.label.shared')}</Text>
+              <Text style={styles.infoValue}>{family?.name || t('common.private')}</Text>
             </View>
           </View>
 
@@ -549,7 +643,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
 
           {voucher.notes ? (
             <View style={styles.notesContainer}>
-              <Text style={styles.notesLabel}>NOTIZEN</Text>
+              <Text style={styles.notesLabel}>{t('voucherDetail.label.notes')}</Text>
               <Text style={styles.notesText}>{voucher.notes}</Text>
             </View>
           ) : null}
@@ -565,7 +659,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.tripLabel}>VERKNÜPFTER AUSFLUG</Text>
+                <Text style={styles.tripLabel}>{t('voucherDetail.label.linkedTrip')}</Text>
                 <Text style={styles.tripTitle}>{linkedTrip.title}</Text>
                 <Text style={styles.tripDestination}>{linkedTrip.destination}</Text>
               </View>
@@ -576,7 +670,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           {/* Code Pool Display */}
           {voucher.code_pool && voucher.code_pool.length > 0 && (
             <View style={styles.codePoolContainer}>
-              <Text style={styles.codePoolTitle}>Verfügbare Codes ({voucher.code_pool.filter(c => !c.used).length}/{voucher.code_pool.length})</Text>
+              <Text style={styles.codePoolTitle}>{t('voucherDetail.availableCodes')} ({voucher.code_pool.filter(c => !c.used).length}/{voucher.code_pool.length})</Text>
               {voucher.code_pool.map((item, index) => (
                 <View key={index} style={[styles.codeItem, item.used && styles.codeItemUsed]}>
                   <View style={styles.codeIndicator}>
@@ -590,8 +684,7 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                     <Text style={[styles.codeText, item.used && styles.codeTextUsed]}>{item.code}</Text>
                     {item.used && item.used_at && (
                       <Text style={styles.codeUsedDate}>
-                        Verwendet am {new Date(item.used_at).toLocaleDateString('de-DE')}
-                        {item.used_by && ` von ${item.used_by}`}
+                        {t('voucherDetail.usedAtBy', { date: new Date(item.used_at).toLocaleDateString(i18n.language), user: item.used_by || '?' })}
                       </Text>
                     )}
                   </View>
@@ -603,11 +696,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
           <View style={styles.divider} />
 
           <View style={styles.historySection}>
-            <Text style={styles.historyTitle}>Transaktionsverlauf</Text>
+            <Text style={styles.historyTitle}>{t('voucherDetail.historyTitle')}</Text>
             {(!voucher.history || voucher.history.length === 0) ? (
               <View style={styles.emptyHistory}>
                 <Icon name="receipt-outline" size={32} color="#e2e8f0" />
-                <Text style={styles.noHistory}>Bisher keine Einlösungen erfasst.</Text>
+                <Text style={styles.noHistory}>{t('voucherDetail.noHistory')}</Text>
               </View>
             ) : (
               voucher.history.map((entry) => (
@@ -616,10 +709,10 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                   <View style={{ flex: 1 }}>
                     <Text style={styles.historyUser}>{entry.user_name}</Text>
                     <Text style={styles.historyDate}>
-                      {new Date(entry.timestamp).toLocaleDateString('de-DE')} • {new Date(entry.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(entry.timestamp).toLocaleDateString(i18n.language)} • {new Date(entry.timestamp).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </View>
-                  <Text style={styles.historyAmount}>– {voucher.type === 'QUANTITY' ? `${Math.floor(Number(entry.amount || 0))} Stk.` : Number(entry.amount || 0).toFixed(2)}</Text>
+                  <Text style={styles.historyAmount}>– {voucher.type === 'QUANTITY' ? `${Math.floor(Number(entry.amount || 0))} ${t('dashboard.pcs')}` : Number(entry.amount || 0).toFixed(2)}</Text>
                 </View>
               ))
             )}
@@ -631,11 +724,11 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
               onPress={() => setShowRedeemModal(true)}
               disabled={remaining <= 0}
             >
-              <Text style={styles.useButtonText}>Betrag abziehen</Text>
+              <Text style={styles.useButtonText}>{t('voucherDetail.redeem')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.deleteButton} onPress={() => setShowConfirmDelete(true)}>
               <Icon name="trash-outline" size={20} color="#ef4444" />
-              <Text style={styles.deleteBtnText}>Löschen</Text>
+              <Text style={styles.deleteBtnText}>{t('common.delete')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -645,12 +738,12 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
       <Modal visible={showRedeemModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Einlösen</Text>
+            <Text style={styles.modalTitle}>{t('voucherDetail.redeemTitle')}</Text>
 
             {/* Code Pool Selection */}
             {voucher.code_pool && voucher.code_pool.length > 0 ? (
               <>
-                <Text style={styles.modalSubtitle}>Wähle einen Code zum Einlösen:</Text>
+                <Text style={styles.modalSubtitle}>{t('voucherDetail.selectCodeToRedeem')}</Text>
                 <ScrollView style={{ maxHeight: 250, marginBottom: 20 }}>
                   {voucher.code_pool.filter(c => !c.used).map((item, index) => (
                     <TouchableOpacity
@@ -677,21 +770,21 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                 </ScrollView>
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowRedeemModal(false); setSelectedCodeForRedeem(null); }}>
-                    <Text style={styles.modalCancelText}>Abbrechen</Text>
+                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.modalConfirm, !selectedCodeForRedeem && { opacity: 0.5 }]}
                     onPress={executeRedemption}
                     disabled={!selectedCodeForRedeem}
                   >
-                    <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                    <Text style={styles.modalConfirmText}>{t('common.confirm')}</Text>
                   </TouchableOpacity>
                 </View>
               </>
             ) : (
               /* Regular Amount Input */
               <>
-                <Text style={styles.modalSubtitle}>Wieviel möchtest du vom Gutschein abziehen?</Text>
+                <Text style={styles.modalSubtitle}>{t('voucherDetail.redeemPrompt')}</Text>
                 <View style={styles.modalInputWrapper}>
                   <TextInput
                     style={styles.modalInput}
@@ -701,14 +794,14 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
                     autoFocus
                     placeholder="0.00"
                   />
-                  <Text style={styles.modalCurrency}>{voucher.currency}</Text>
+                  <Text style={styles.modalCurrency}>{getCurrencySymbol(voucher.currency)}</Text>
                 </View>
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowRedeemModal(false); setRedeemInput(''); }}>
-                    <Text style={styles.modalCancelText}>Abbrechen</Text>
+                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.modalConfirm} onPress={executeRedemption}>
-                    <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                    <Text style={styles.modalConfirmText}>{t('common.confirm')}</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -724,18 +817,33 @@ const VoucherDetail: React.FC<VoucherDetailProps> = ({ voucher, owner, family, f
             <View style={styles.deleteIconCircle}>
               <Icon name="trash" size={30} color="#ef4444" />
             </View>
-            <Text style={styles.modalTitle}>Gutschein löschen?</Text>
-            <Text style={styles.modalSubtitle}>Diese Aktion kann nicht rückgängig gemacht werden. Möchtest du wirklich fortfahren?</Text>
+            <Text style={styles.modalTitle}>{t('voucherDetail.deletePrompt.title')}</Text>
+            <Text style={styles.modalSubtitle}>{t('voucherDetail.deletePrompt.message')}</Text>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setShowConfirmDelete(false)}>
-                <Text style={styles.modalCancelText}>Abbrechen</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalConfirm, { backgroundColor: '#ef4444' }]} onPress={() => onDeleteVoucher(voucher.id)}>
-                <Text style={styles.modalConfirmText}>Ja, löschen</Text>
+                <Text style={styles.modalConfirmText}>{t('common.delete')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Currency Picker Modal */}
+      <Modal visible={showCurrencyPicker} transparent animationType="fade">
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setShowCurrencyPicker(false)}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '80%' }}>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#111827', textAlign: 'center', marginBottom: 16 }}>{t('addVoucher.selectCurrency')}</Text>
+            {CURRENCIES.map(cur => (
+              <TouchableOpacity key={cur.code} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }} onPress={() => { setEditCurrency(cur.code); setShowCurrencyPicker(false); }}>
+                <Text style={[{ fontSize: 16, color: '#374151' }, editCurrency === cur.code && { color: '#2563eb', fontWeight: '800' }]}>{cur.code} {cur.symbol !== cur.code ? cur.symbol : ''}</Text>
+                {editCurrency === cur.code && <Icon name="checkmark" size={18} color="#2563eb" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -770,18 +878,29 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: -30,
     borderRadius: 32,
-    padding: 24,
+    elevation: 4,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 8,
-    marginBottom: 40
+    shadowRadius: 4,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   storeName: { fontSize: 12, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 },
   voucherTitle: { fontSize: 24, fontWeight: '900', color: '#111827', marginTop: 4 },
   ownerBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   ownerText: { fontSize: 10, fontWeight: '700', color: '#64748b' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around', alignItems: 'flex-start', marginBottom: 20
+  },
 
   balanceContainer: { marginBottom: 25 },
   balanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },
@@ -810,7 +929,6 @@ const styles = StyleSheet.create({
   historyDate: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   historyAmount: { fontSize: 16, fontWeight: '900', color: '#ef4444' },
 
-  actionRow: { marginTop: 10 },
   useButton: { height: 60, backgroundColor: '#111827', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   useButtonDisabled: { opacity: 0.3 },
   useButtonText: { color: '#fff', fontSize: 17, fontWeight: '800' },

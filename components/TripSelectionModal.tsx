@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, SafeAreaView, Image } from 'react-native';
 import { Trip } from '../types';
 import Icon from './Icon';
+import { useTranslation } from 'react-i18next';
 
 interface TripSelectionModalProps {
     visible: boolean;
@@ -12,6 +14,7 @@ interface TripSelectionModalProps {
 }
 
 const TripSelectionModal: React.FC<TripSelectionModalProps> = ({ visible, onClose, onSelect, trips, selectedTripId }) => {
+    const { t } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredTrips, setFilteredTrips] = useState<Trip[]>(trips);
 
@@ -61,7 +64,7 @@ const TripSelectionModal: React.FC<TripSelectionModalProps> = ({ visible, onClos
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Ausflug wählen</Text>
+                    <Text style={styles.headerTitle}>{t('tripSelection.title')}</Text>
                     <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                         <Icon name="close" size={24} color="#111827" />
                     </TouchableOpacity>
@@ -71,7 +74,7 @@ const TripSelectionModal: React.FC<TripSelectionModalProps> = ({ visible, onClos
                     <Icon name="search" size={20} color="#94a3b8" style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Ausflug suchen..."
+                        placeholder={t('tripSelection.searchPlaceholder')}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         autoFocus={false}
@@ -99,7 +102,7 @@ const TripSelectionModal: React.FC<TripSelectionModalProps> = ({ visible, onClos
                             <View style={[styles.iconBox, { backgroundColor: '#f1f5f9' }]}>
                                 <Icon name="close" size={20} color="#64748b" />
                             </View>
-                            <Text style={[styles.itemTitle, selectedTripId === null && styles.itemTextSelected]}>Kein Ausflug</Text>
+                            <Text style={[styles.itemTitle, selectedTripId === null && styles.itemTextSelected]}>{t('tripSelection.noTrip')}</Text>
                             {selectedTripId === null && <Icon name="checkmark" size={20} color="#fff" />}
                         </TouchableOpacity>
                     }

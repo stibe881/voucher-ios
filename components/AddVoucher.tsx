@@ -1,11 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, Image, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Voucher, Family, VoucherType, Trip, User } from '../types';
 import { supabaseService } from '../services/supabase';
 import Icon from './Icon';
 import TripSelectionModal from './TripSelectionModal';
+import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Dynamic import to prevent crash in Expo Go
 let DocumentScanner: any = null;
@@ -22,9 +24,23 @@ interface AddVoucherProps {
   onSave: (v: Omit<Voucher, 'id'>) => void;
 }
 
-const CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
+export const CURRENCIES = [
+  { code: 'CHF', symbol: 'CHF' },
+  { code: 'EUR', symbol: '€' },
+  { code: 'USD', symbol: '$' },
+  { code: 'GBP', symbol: '£' },
+  { code: 'CAD', symbol: 'C$' },
+  { code: 'AUD', symbol: 'A$' },
+  { code: 'PLN', symbol: 'zł' },
+  { code: 'RUB', symbol: '₽' },
+];
+
+export const getCurrencySymbol = (code: string): string => {
+  return CURRENCIES.find(c => c.code === code)?.symbol || code;
+};
 
 const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel, onSave }) => {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [store, setStore] = useState('');
   const [category, setCategory] = useState('Shopping');
@@ -37,10 +53,18 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
   const [pin, setPin] = useState('');
   const [website, setWebsite] = useState('');
   const [familyId, setFamilyId] = useState<string | null>(null);
+  const [minOrderValue, setMinOrderValue] = useState(''); // NEW
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageUrl2, setImageUrl2] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+
+  // Load default currency from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem('default-currency').then(val => {
+      if (val) setCurrency(val);
+    });
+  }, []);
   const [showSecondPageModal, setShowSecondPageModal] = useState(false);
   const [pendingFirstImage, setPendingFirstImage] = useState<{ base64: string, uri: string } | null>(null);
 
@@ -96,7 +120,7 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
 
   const handleSubmit = () => {
     if (!title.trim() || !store.trim()) {
-      alert("Fehler: Titel und Geschäft sind erforderlich.");
+      alert(t('addVoucher.error.titleStoreRequired'));
       return;
     }
 
@@ -114,7 +138,7 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
       // Validate: no duplicates
       const uniqueCodes = new Set(codes);
       if (uniqueCodes.size !== codes.length) {
-        alert("Fehler: Codes müssen eindeutig sein (keine Duplikate).");
+        alert(t('addVoucher.error.codesDuplicate'));
         return;
       }
 
@@ -128,12 +152,12 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
     } else {
       // Regular single amount
       if (!amount.trim()) {
-        alert("Fehler: Betrag/Anzahl ist erforderlich.");
+        alert(t('addVoucher.error.amountRequired'));
         return;
       }
       finalAmount = parseFloat(amount.replace(',', '.'));
       if (isNaN(finalAmount)) {
-        alert("Fehler: Bitte einen gültigen Betrag eingeben.");
+        alert(t('addVoucher.error.invalidAmount'));
         return;
       }
     }
@@ -157,7 +181,8 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
       user_id: '',
       history: [],
       trip_id: selectedTripId,
-      code_pool: codePool // NEW: Add code pool if exists
+      code_pool: codePool, // NEW: Add code pool if exists
+      min_order_value: minOrderValue ? parseFloat(minOrderValue.replace(',', '.')) : null
     });
   };
 
@@ -165,7 +190,7 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
   const scanDocument = async (isSecondPage: boolean = false) => {
     // Fallback to regular camera if DocumentScanner not available
     if (!DocumentScanner) {
-      alert('Dokumenten-Scanner nicht verfügbar. Bitte erstelle einen Development Build oder nutze die Galerie.');
+      alert(t('addVoucher.error.scannerNotAvailable'));
       return;
     }
 
@@ -211,9 +236,9 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
       console.error("Scan error:", e);
       // Fallback to regular camera if scanner fails (e.g., in Expo Go)
       if (e.message?.includes('native module') || e.message?.includes('null')) {
-        alert('Dokumenten-Scanner nicht verfügbar. Bitte erstelle einen Development Build oder nutze die Galerie.');
+        alert(t('addVoucher.error.scannerNotAvailable'));
       } else {
-        alert("Fehler beim Scannen: " + (e.message || 'Unbekannter Fehler'));
+        alert(t('addVoucher.error.scanError') + (e.message || 'Unbekannter Fehler'));
       }
     }
   };
@@ -226,13 +251,13 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
       if (source === 'camera') {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-          alert('Kamera-Berechtigung ist erforderlich, um Gutscheine zu scannen.');
+          alert(t('addVoucher.error.cameraPermission'));
           return;
         }
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          alert('Galerie-Berechtigung ist erforderlich, um Bilder auszuwählen.');
+          alert(t('addVoucher.error.galleryPermission'));
           return;
         }
       }
@@ -277,7 +302,7 @@ const AddVoucher: React.FC<AddVoucherProps> = ({ families, currentUser, onCancel
       }
     } catch (e: any) {
       console.error("Fehler beim Bildwählen:", e);
-      alert("Fehler beim Laden des Bildes: " + (e.message || 'Unbekannt'));
+      alert(t('addVoucher.error.imageLoad') + (e.message || 'Unbekannt'));
     }
   };
 
@@ -327,7 +352,7 @@ Antworte NUR mit diesem JSON-Format:
   "store": "Name des Geschäfts (z.B. Migros, Coop, IKEA)",
   "title": "Beschreibung des Gutscheins",
   "amount": "Betrag als Zahl ohne Währung",
-  "currency": "CHF, EUR oder USD",
+  "currency": "CHF, EUR, USD, GBP, CAD, AUD, PLN oder RUB",
   "voucherType": "VALUE",
   "expiryDate": "Ablaufdatum als DD.MM.YYYY oder leer",
   "code": "DIE LÄNGSTE ZAHLENKETTE auf dem Gutschein (z.B. 1234-5678-9012-3456 oder 19-stellige Nummer)",
@@ -375,7 +400,7 @@ ACHTE BESONDERS AUF:
 
     } catch (error) {
       console.error("AI Scan Error:", error);
-      alert("KI Scan: Daten konnten nicht automatisch erkannt werden.");
+      alert(t('addVoucher.error.aiScanFailed'));
     } finally {
       setIsAnalyzing(false);
     }
@@ -396,7 +421,7 @@ ACHTE BESONDERS AUF:
           <TouchableOpacity onPress={onCancel} style={styles.backButton}>
             <Icon name="chevron-back" size={24} color="#4b5563" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Hinzufügen</Text>
+          <Text style={styles.headerTitle}>{t('addVoucher.title')}</Text>
         </View>
 
         <View style={styles.scanSection}>
@@ -405,30 +430,30 @@ ACHTE BESONDERS AUF:
               <View style={[styles.scanIconBox, { backgroundColor: '#eff6ff' }]}>
                 {isAnalyzing ? <ActivityIndicator color="#2563eb" /> : <Icon name="camera" size={28} color="#2563eb" />}
               </View>
-              <Text style={styles.scanActionLabel}>KI Scan</Text>
+              <Text style={styles.scanActionLabel}>{t('addVoucher.scanAction')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.scanActionBtn, isAnalyzing && styles.scanButtonDisabled]} onPress={() => pickImage('gallery')} disabled={isAnalyzing}>
               <View style={[styles.scanIconBox, { backgroundColor: '#f0fdf4' }]}>
                 <Icon name="images" size={28} color="#10b981" />
               </View>
-              <Text style={styles.scanActionLabel}>Galerie</Text>
+              <Text style={styles.scanActionLabel}>{t('addVoucher.galleryAction')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Bezeichnung</Text>
-            <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Gutschein Name" placeholderTextColor="#9ca3af" />
+            <Text style={styles.label}>{t('addVoucher.label.title')}</Text>
+            <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder={t('addVoucher.placeholder.voucherName')} placeholderTextColor="#9ca3af" />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Geschäft</Text>
-            <TextInput style={styles.input} value={store} onChangeText={setStore} placeholder="z.B. Migros, Zalando" placeholderTextColor="#9ca3af" />
+            <Text style={styles.label}>{t('addVoucher.label.store')}</Text>
+            <TextInput style={styles.input} value={store} onChangeText={setStore} placeholder={t('addVoucher.placeholder.storeExample')} placeholderTextColor="#9ca3af" />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Kategorie</Text>
+            <Text style={styles.label}>{t('addVoucher.label.category')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Gastro', 'Sonstiges'].map(cat => (
                 <TouchableOpacity
@@ -436,20 +461,20 @@ ACHTE BESONDERS AUF:
                   style={[styles.familyItem, category === cat && styles.familyItemActive]}
                   onPress={() => setCategory(cat)}
                 >
-                  <Text style={[styles.familyItemText, category === cat && styles.familyItemTextActive]}>{cat}</Text>
+                  <Text style={[styles.familyItemText, category === cat && styles.familyItemTextActive]}>{t(`categories.${cat}`, cat)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Gutscheintyp</Text>
+            <Text style={styles.label}>{t('addVoucher.label.voucherType')}</Text>
             <View style={styles.familySelect}>
               <TouchableOpacity style={[styles.familyItem, type === 'VALUE' && styles.familyItemActive]} onPress={() => setType('VALUE')}>
-                <Text style={[styles.familyItemText, type === 'VALUE' && styles.familyItemTextActive]}>Wert-Gutschein</Text>
+                <Text style={[styles.familyItemText, type === 'VALUE' && styles.familyItemTextActive]}>{t('addVoucher.label.valueVoucher')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.familyItem, type === 'QUANTITY' && styles.familyItemActive]} onPress={() => setType('QUANTITY')}>
-                <Text style={[styles.familyItemText, type === 'QUANTITY' && styles.familyItemTextActive]}>Anzahl-Gutschein</Text>
+                <Text style={[styles.familyItemText, type === 'QUANTITY' && styles.familyItemTextActive]}>{t('addVoucher.label.quantityVoucher')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -458,75 +483,96 @@ ACHTE BESONDERS AUF:
           {type === 'QUANTITY' && !codeList.trim() ? (
             <View style={styles.row}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-                <Text style={styles.label}>Anzahl</Text>
+                <Text style={styles.label}>{t('addVoucher.label.quantity')}</Text>
                 <TextInput style={styles.input} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" placeholderTextColor="#9ca3af" />
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Ablaufdatum</Text>
-                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder="TT.MM.JJJJ" keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
+                <Text style={styles.label}>{t('addVoucher.label.expiryDateSimple')}</Text>
+                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder={t('addVoucher.placeholder.date')} keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
               </View>
             </View>
           ) : type === 'VALUE' ? (
             <View style={styles.row}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-                <Text style={styles.label}>Guthaben</Text>
+                <Text style={styles.label}>{t('addVoucher.label.balance')}</Text>
                 <View style={styles.amountInputContainer}>
-                  <TextInput style={styles.input} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0.00" placeholderTextColor="#9ca3af" />
+                  <TextInput style={styles.input} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder={t('addVoucher.placeholder.amount')} placeholderTextColor="#9ca3af" />
                   <TouchableOpacity style={styles.currencyBadge} onPress={() => setShowCurrencyPicker(true)}>
-                    <Text style={styles.currencyBadgeText}>{currency}</Text>
+                    <Text style={styles.currencyBadgeText}>{getCurrencySymbol(currency)}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Ablaufdatum</Text>
-                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder="TT.MM.JJJJ" keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
+                <Text style={styles.label}>{t('addVoucher.label.expiryDateSimple')}</Text>
+                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder={t('addVoucher.placeholder.date')} keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
               </View>
             </View>
           ) : null}
+
+          {/* Min Order Value Input */}
+          {/* Min Order Value Input - Only for VALUE vouchers */}
+          {type === 'VALUE' && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('addVoucher.label.minOrderValueOptional')}</Text>
+              <View style={styles.amountInputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={minOrderValue}
+                  onChangeText={setMinOrderValue}
+                  keyboardType="numeric"
+                  placeholder={t('addVoucher.placeholder.amount')}
+                  placeholderTextColor="#9ca3af"
+                />
+                <View style={styles.currencyBadge}>
+                  <Text style={styles.currencyBadgeText}>{getCurrencySymbol(currency)}</Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Multi-code input for QUANTITY type */}
           {type === 'QUANTITY' && (
             <>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Codes (einer pro Zeile) {codeList.trim() && `• ${codeList.split('\n').filter(c => c.trim()).length} Stk.`}</Text>
+                <Text style={styles.label}>{t('addVoucher.label.codesList')} {codeList.trim() && `• ${codeList.split('\n').filter(c => c.trim()).length} ${t('dashboard.pcs')}`}</Text>
                 <TextInput
                   style={[styles.input, { height: 120, textAlignVertical: 'top', paddingTop: 15 }]}
                   value={codeList}
                   onChangeText={setCodeList}
-                  placeholder="ABC123\nDEF456\nGHI789"
+                  placeholder={t('addVoucher.placeholder.codes')}
                   placeholderTextColor="#9ca3af"
                   multiline
                 />
-                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>💡 Bei mehreren Codes wird die Anzahl automatisch gesetzt</Text>
+                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{t('addVoucher.hint.codesCount')}</Text>
               </View>
               <View style={[styles.inputGroup]}>
-                <Text style={styles.label}>Ablaufdatum</Text>
-                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder="TT.MM.JJJJ" keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
+                <Text style={styles.label}>{t('addVoucher.label.expiryDateSimple')}</Text>
+                <TextInput style={styles.input} value={expiry} onChangeText={(t) => setExpiry(formatDate(t))} placeholder={t('addVoucher.placeholder.date')} keyboardType="numeric" placeholderTextColor="#9ca3af" maxLength={10} />
               </View>
             </>
           )}
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-              <Text style={styles.label}>Nummer</Text>
-              <TextInput style={styles.input} value={code} onChangeText={setCode} placeholder="Nummer" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>{t('addVoucher.label.numberSimple')}</Text>
+              <TextInput style={styles.input} value={code} onChangeText={setCode} placeholder={t('addVoucher.label.numberSimple')} placeholderTextColor="#9ca3af" />
             </View>
             <View style={[styles.inputGroup, { flex: 0.5 }]}>
-              <Text style={styles.label}>PIN</Text>
-              <TextInput style={styles.input} value={pin} onChangeText={setPin} placeholder="PIN" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>{t('addVoucher.label.pin')}</Text>
+              <TextInput style={styles.input} value={pin} onChangeText={setPin} placeholder={t('addVoucher.label.pin')} placeholderTextColor="#9ca3af" />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Webseite</Text>
+            <Text style={styles.label}>{t('addVoucher.label.website')}</Text>
             <TextInput style={styles.input} value={website} onChangeText={setWebsite} placeholder="https://example.com" placeholderTextColor="#9ca3af" autoCapitalize="none" keyboardType="url" />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Gruppe (Teilen)</Text>
+            <Text style={styles.label}>{t('addVoucher.label.groupShare')}</Text>
             <View style={styles.familySelect}>
               <TouchableOpacity style={[styles.familyItem, familyId === null && styles.familyItemActive]} onPress={() => setFamilyId(null)}>
-                <Text style={[styles.familyItemText, familyId === null && styles.familyItemTextActive]}>Privat</Text>
+                <Text style={[styles.familyItemText, familyId === null && styles.familyItemTextActive]}>{t('common.private')}</Text>
               </TouchableOpacity>
               {families.map(f => (
                 <TouchableOpacity key={f.id} style={[styles.familyItem, familyId === f.id && styles.familyItemActive]} onPress={() => setFamilyId(f.id)}>
@@ -538,7 +584,7 @@ ACHTE BESONDERS AUF:
 
           {/* New Trip Selection */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ausflug verknüpfen</Text>
+            <Text style={styles.label}>{t('addVoucher.label.linkTrip')}</Text>
             <TouchableOpacity
               style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: selectedTripId ? 10 : 20 }]}
               onPress={() => setShowTripModal(true)}
@@ -554,7 +600,7 @@ ACHTE BESONDERS AUF:
                   })()
                 )}
                 <Text style={{ color: selectedTripId ? '#1e293b' : '#94a3b8', fontSize: 16, flex: 1 }} numberOfLines={1}>
-                  {selectedTripId ? trips.find(t => t.id === selectedTripId)?.title : 'Ausflug wählen...'}
+                  {selectedTripId ? trips.find(t => t.id === selectedTripId)?.title : t('addVoucher.label.selectTrip')}
                 </Text>
               </View>
               <Icon name="chevron-down" size={20} color="#94a3b8" />
@@ -571,20 +617,20 @@ ACHTE BESONDERS AUF:
 
 
           <TouchableOpacity style={styles.saveButton} onPress={handleSubmit}>
-            <Text style={styles.saveButtonText}>Gutschein speichern</Text>
+            <Text style={styles.saveButtonText}>{t('addVoucher.saveVoucher')}</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </ScrollView >
 
       {/* Currency Picker Modal */}
-      <Modal visible={showCurrencyPicker} transparent animationType="fade">
+      < Modal visible={showCurrencyPicker} transparent animationType="fade" >
         <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowCurrencyPicker(false)}>
           <View style={styles.pickerBox}>
-            <Text style={styles.pickerTitle}>Währung wählen</Text>
+            <Text style={styles.pickerTitle}>{t('addVoucher.selectCurrency')}</Text>
             {CURRENCIES.map(cur => (
-              <TouchableOpacity key={cur} style={styles.pickerItem} onPress={() => { setCurrency(cur); setShowCurrencyPicker(false); }}>
-                <Text style={[styles.pickerItemText, currency === cur && { color: '#2563eb', fontWeight: '800' }]}>{cur}</Text>
-                {currency === cur && <Icon name="checkmark" size={18} color="#2563eb" />}
+              <TouchableOpacity key={cur.code} style={styles.pickerItem} onPress={() => { setCurrency(cur.code); setShowCurrencyPicker(false); }}>
+                <Text style={[styles.pickerItemText, currency === cur.code && { color: '#2563eb', fontWeight: '800' }]}>{cur.code} {cur.symbol !== cur.code ? cur.symbol : ''}</Text>
+                {currency === cur.code && <Icon name="checkmark" size={18} color="#2563eb" />}
               </TouchableOpacity>
             ))}
           </View>
@@ -592,20 +638,20 @@ ACHTE BESONDERS AUF:
       </Modal >
 
       {/* Scan Preview Modal */}
-      <Modal visible={showScanModal} transparent animationType="slide">
+      < Modal visible={showScanModal} transparent animationType="slide" >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerBox}>
-            <Text style={styles.pickerTitle}>KI Scan Ergebnis</Text>
+            <Text style={styles.pickerTitle}>{t('addVoucher.scanResult.title')}</Text>
             {scannedData && (
               <View>
-                <Text style={{ fontSize: 14, color: '#64748b', marginBottom: 15 }}>Gefundene Daten:</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Titel:</Text> {scannedData.title}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Geschäft:</Text> {scannedData.store}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Betrag:</Text> {scannedData.amount} {scannedData.currency}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Ablauf:</Text> {scannedData.expiry || '-'}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Nummer:</Text> {scannedData.code || '-'}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>PIN:</Text> {scannedData.pin || '-'}</Text>
-                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>Webseite:</Text> {scannedData.website || '-'}</Text>
+                <Text style={{ fontSize: 14, color: '#64748b', marginBottom: 15 }}>{t('addVoucher.scanResult.foundData')}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelTitle')}</Text> {scannedData.title}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelStore')}</Text> {scannedData.store}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelAmount')}</Text> {scannedData.amount} {scannedData.currency}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelExpiry')}</Text> {scannedData.expiry || '-'}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelNumber')}</Text> {scannedData.code || '-'}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelPin')}</Text> {scannedData.pin || '-'}</Text>
+                <Text style={{ fontSize: 13, marginBottom: 5 }}><Text style={{ fontWeight: '700' }}>{t('addVoucher.scanResult.labelWebsite')}</Text> {scannedData.website || '-'}</Text>
               </View>
             )}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
@@ -613,7 +659,7 @@ ACHTE BESONDERS AUF:
                 style={{ flex: 1, height: 50, backgroundColor: '#f1f5f9', borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
                 onPress={() => { setShowScanModal(false); setScannedData(null); }}
               >
-                <Text style={{ fontSize: 16, fontWeight: '700', color: '#64748b' }}>Abbrechen</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#64748b' }}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, height: 50, backgroundColor: '#2563eb', borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
@@ -633,7 +679,7 @@ ACHTE BESONDERS AUF:
                   setScannedData(null);
                 }}
               >
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff' }}>Übernehmen</Text>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff' }}>{t('common.apply')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -641,29 +687,29 @@ ACHTE BESONDERS AUF:
       </Modal >
 
       {/* Second Page Modal */}
-      <Modal visible={showSecondPageModal} transparent animationType="fade">
+      < Modal visible={showSecondPageModal} transparent animationType="fade" >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerBox}>
-            <Text style={styles.pickerTitle}>Zweite Seite scannen?</Text>
-            <Text style={{ fontSize: 14, color: '#64748b', marginBottom: 20, textAlign: 'center' }}>Hat der Gutschein eine Rückseite mit weiteren Informationen?</Text>
+            <Text style={styles.pickerTitle}>{t('addVoucher.secondPage.title')}</Text>
+            <Text style={{ fontSize: 14, color: '#64748b', marginBottom: 20, textAlign: 'center' }}>{t('addVoucher.secondPage.message')}</Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
                 style={{ flex: 1, height: 50, backgroundColor: '#f1f5f9', borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
                 onPress={processSingleImage}
               >
-                <Text style={{ fontSize: 16, fontWeight: '700', color: '#64748b' }}>Nein, weiter</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#64748b' }}>{t('addVoucher.secondPage.noContinue')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, height: 50, backgroundColor: '#2563eb', borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
                 onPress={() => pickImage('camera', true)}
               >
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff' }}>Ja, scannen</Text>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff' }}>{t('addVoucher.secondPage.yesScan')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal>
-    </View>
+      </Modal >
+    </View >
   );
 };
 

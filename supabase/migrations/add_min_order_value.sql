@@ -1,0 +1,1 @@
+ALTER TABLE vouchers ADD COLUMN min_order_value NUMERIC DEFAULT NULL;

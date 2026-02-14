@@ -1,11 +1,31 @@
 
 export type VoucherType = 'VALUE' | 'QUANTITY';
 
+export interface NotificationPreferences {
+  voucher_expiry: boolean;
+  family_invitation: boolean;
+  invitation_response: boolean;
+  voucher_new: boolean;
+  voucher_transfer: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  voucher_expiry: true,
+  family_invitation: true,
+  invitation_response: true,
+  voucher_new: true,
+  voucher_transfer: true,
+};
+
 export interface User {
   id: string;
   email: string;
   name: string;
   notifications_enabled?: boolean;
+  notification_preferences?: NotificationPreferences;
+  push_token?: string;
+  language?: string;
+  default_currency?: string;
 }
 
 export interface Redemption {
@@ -60,6 +80,7 @@ export interface Voucher {
   history?: Redemption[]; // Neu: Verlauf der Einlösungen
   trip_id?: number | null; // Verknüpfung zu einem Ausflug
   code_pool?: CodePoolItem[]; // NEW: Multi-code support for quantity vouchers
+  min_order_value?: number | null; // Mindestbestellwert
 }
 
 export interface Trip {

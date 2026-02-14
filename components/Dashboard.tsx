@@ -1,8 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Pressable, RefreshControl, ActivityIndicator, TextInput } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Pressable, RefreshControl, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { Voucher, Family, AppNotification } from '../types';
 import Icon from './Icon';
+import { useTranslation } from 'react-i18next';
+import { getCurrencySymbol } from './AddVoucher';
 
 interface DashboardProps {
   vouchers: Voucher[];
@@ -11,6 +13,7 @@ interface DashboardProps {
   onUpdateVoucher: (v: Voucher) => Promise<void>;
   onSelectVoucher: (v: Voucher) => void;
   onOpenNotifications: () => void;
+  onSelectNotification?: (n: AppNotification) => void; // New prop
   onRefresh?: () => Promise<void>;
   loadError?: string | null;
   userEmail?: string;
@@ -20,6 +23,7 @@ interface DashboardProps {
 type SortOption = 'newest' | 'alphabetical' | 'amount' | 'expiry';
 
 const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications, onUpdateVoucher, onSelectVoucher, onOpenNotifications, onRefresh, loadError, userEmail, userName }) => {
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,12 +105,12 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
     const remaining = Number(redeemVoucher.remaining_amount || 0);
 
     if (isNaN(val) || val <= 0) {
-      alert("Bitte einen gültigen Betrag eingeben.");
+      alert(t('dashboard.invalidAmount'));
       return;
     }
 
     if (val > remaining) {
-      alert("Betrag ist höher als das Restguthaben.");
+      alert(t('dashboard.amountTooHigh'));
       return;
     }
 
@@ -130,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
         history: [newRedemption, ...(redeemVoucher.history || [])]
       });
     } catch (err) {
-      alert("Konnte den Betrag nicht aktualisieren.");
+      alert(t('dashboard.updateFailed'));
     } finally {
       setIsProcessing(null);
       setRedeemVoucher(null);
@@ -145,8 +149,8 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Gutscheine</Text>
-          <Text style={styles.date}>{filteredAndSortedVouchers.length} Verfügbar</Text>
+          <Text style={styles.greeting}>{t('dashboard.title')}</Text>
+          <Text style={styles.date}>{filteredAndSortedVouchers.length} {t('dashboard.available')}</Text>
         </View>
         <TouchableOpacity style={styles.notificationBtn} onPress={onOpenNotifications}>
           <Icon name="notifications-outline" size={24} color="#0f172a" />
@@ -160,7 +164,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
             <Icon name="search-outline" size={18} color="#94a3b8" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Suchen..."
+              placeholder={t('dashboard.searchPlaceholder')}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholderTextColor="#94a3b8"
@@ -179,13 +183,13 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
 
         {showFilters && (
           <View style={styles.filtersPanel}>
-            <Text style={styles.filterSectionLabel}>Sortierung</Text>
+            <Text style={styles.filterSectionLabel}>{t('dashboard.sort')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterGroupScroll}>
               {[
-                { id: 'newest', label: 'Neueste', icon: 'time-outline' },
-                { id: 'alphabetical', label: 'A-Z', icon: 'text-outline' },
-                { id: 'amount', label: 'Betrag', icon: 'card-outline' },
-                { id: 'expiry', label: 'Ablauf', icon: 'calendar-outline' }
+                { id: 'newest', label: t('dashboard.newest'), icon: 'time-outline' },
+                { id: 'alphabetical', label: t('dashboard.alphabetical'), icon: 'text-outline' },
+                { id: 'amount', label: t('dashboard.amount'), icon: 'card-outline' },
+                { id: 'expiry', label: t('dashboard.expiry'), icon: 'calendar-outline' }
               ].map(opt => (
                 <TouchableOpacity
                   key={opt.id}
@@ -198,19 +202,19 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
               ))}
             </ScrollView>
 
-            <Text style={styles.filterSectionLabel}>Familie</Text>
+            <Text style={styles.filterSectionLabel}>{t('dashboard.family')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterGroupScroll}>
               <TouchableOpacity
                 style={[styles.sortChip, !filterFamily && styles.sortChipActive]}
                 onPress={() => setFilterFamily(null)}
               >
-                <Text style={[styles.sortChipText, !filterFamily && styles.sortChipTextActive]}>Alle</Text>
+                <Text style={[styles.sortChipText, !filterFamily && styles.sortChipTextActive]}>{t('dashboard.all')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sortChip, filterFamily === 'personal' && styles.sortChipActive]}
                 onPress={() => setFilterFamily(filterFamily === 'personal' ? null : 'personal')}
               >
-                <Text style={[styles.sortChipText, filterFamily === 'personal' && styles.sortChipTextActive]}>Nur Ich</Text>
+                <Text style={[styles.sortChipText, filterFamily === 'personal' && styles.sortChipTextActive]}>{t('dashboard.onlyMe')}</Text>
               </TouchableOpacity>
               {families.map(f => (
                 <TouchableOpacity
@@ -223,13 +227,13 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
               ))}
             </ScrollView>
 
-            <Text style={styles.filterSectionLabel}>Kategorie</Text>
+            <Text style={styles.filterSectionLabel}>{t('dashboard.category')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterGroupScroll}>
               <TouchableOpacity
                 style={[styles.sortChip, !filterCategory && styles.sortChipActive]}
                 onPress={() => setFilterCategory(null)}
               >
-                <Text style={[styles.sortChipText, !filterCategory && styles.sortChipTextActive]}>Alle</Text>
+                <Text style={[styles.sortChipText, !filterCategory && styles.sortChipTextActive]}>{t('dashboard.all')}</Text>
               </TouchableOpacity>
               {['Shopping', 'Lebensmittel', 'Wohnen', 'Reisen', 'Freizeit', 'Gastro', 'Sonstiges'].map(cat => (
                 <TouchableOpacity
@@ -237,7 +241,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                   style={[styles.sortChip, filterCategory === cat && styles.sortChipActive]}
                   onPress={() => setFilterCategory(filterCategory === cat ? null : cat)}
                 >
-                  <Text style={[styles.sortChipText, filterCategory === cat && styles.sortChipTextActive]}>{cat}</Text>
+                  <Text style={[styles.sortChipText, filterCategory === cat && styles.sortChipTextActive]}>{t(`categories.${cat}`, cat)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -283,10 +287,10 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                     {voucher.code_pool && voucher.code_pool.length > 0 ? (
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={styles.amountText}>{voucher.code_pool.filter(c => !c.used).length}<Text style={styles.currencyText}>/{voucher.code_pool.length}</Text></Text>
-                        <Text style={[styles.currencyText, { fontSize: 11, marginTop: -2 }]}>Codes</Text>
+                        <Text style={[styles.currencyText, { fontSize: 11, marginTop: -2 }]}>{t('dashboard.codes')}</Text>
                       </View>
                     ) : (
-                      <Text style={styles.amountText}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.currencyText}> {voucher.type === 'QUANTITY' ? 'Stk.' : voucher.currency}</Text></Text>
+                      <Text style={styles.amountText}>{voucher.type === 'QUANTITY' ? Math.floor(remaining) : remaining.toFixed(2)}<Text style={styles.currencyText}> {voucher.type === 'QUANTITY' ? t('dashboard.pcs') : getCurrencySymbol(voucher.currency)}</Text></Text>
                     )}
                   </View>
                 </View>
@@ -297,14 +301,14 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
 
                 <View style={styles.cardFooter}>
                   <View>
-                    <Text style={styles.footerLabel}>GÜLTIG BIS</Text>
-                    <Text style={[styles.footerValue, voucher.expiry_date && styles.expiryHighlight]}>{displayDateDE(voucher.expiry_date) || 'Unbegrenzt'}</Text>
+                    <Text style={styles.footerLabel}>{t('dashboard.validUntil')}</Text>
+                    <Text style={[styles.footerValue, voucher.expiry_date && styles.expiryHighlight]}>{displayDateDE(voucher.expiry_date) || t('dashboard.unlimited')}</Text>
                   </View>
                   <TouchableOpacity
                     style={[styles.useButton, (remaining <= 0 || processing) && { opacity: 0.3 }]}
                     onPress={(e: any) => { e.stopPropagation(); if (remaining > 0 && !processing) handleRedeem(voucher); }}
                   >
-                    <Text style={styles.useButtonText}>{processing ? '...' : 'Abziehen'}</Text>
+                    <Text style={styles.useButtonText}>{processing ? '...' : t('dashboard.redeem')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -314,7 +318,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
           {filteredAndSortedVouchers.length === 0 && (
             <View style={styles.emptyContainer}>
               <Icon name="search-outline" size={60} color="#e2e8f0" />
-              <Text style={styles.emptyText}>Nichts gefunden</Text>
+              <Text style={styles.emptyText}>{t('dashboard.nothingFound')}</Text>
             </View>
           )}
         </View>
@@ -326,7 +330,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>
-                {redeemVoucher.type === 'VALUE' ? 'Betrag abziehen' : 'Anzahl abziehen'}
+                {redeemVoucher.type === 'VALUE' ? t('dashboard.redeemAmount') : t('dashboard.redeemQuantity')}
               </Text>
               <Text style={styles.modalSubtitle}>{redeemVoucher.title}</Text>
 
@@ -334,7 +338,7 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
                 style={styles.modalInput}
                 value={redeemAmount}
                 onChangeText={setRedeemAmount}
-                placeholder={redeemVoucher.type === 'VALUE' ? "Betrag (z.B. 20.00)" : "Anzahl"}
+                placeholder={redeemVoucher.type === 'VALUE' ? t('dashboard.amountPlaceholder') : t('dashboard.quantityPlaceholder')}
                 keyboardType="numeric"
                 autoFocus
                 placeholderTextColor="#9ca3af"
@@ -342,10 +346,10 @@ const Dashboard: React.FC<DashboardProps> = ({ vouchers, families, notifications
 
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRedeemModal(false)}>
-                  <Text style={styles.modalCancelText}>Abbrechen</Text>
+                  <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.modalConfirmBtn} onPress={processRedemption}>
-                  <Text style={styles.modalConfirmText}>Bestätigen</Text>
+                  <Text style={styles.modalConfirmText}>{t('common.save')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

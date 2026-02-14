@@ -1,7 +1,10 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthState, Voucher, Family, User, AppNotification, FamilyInvite } from './types';
+import './i18n'; // Initialize i18n
+import { useTranslation } from 'react-i18next';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import AddVoucher from './components/AddVoucher';
@@ -12,8 +15,10 @@ import NotificationCenter from './components/NotificationCenter';
 import Toast from './components/Toast';
 import { supabase, supabaseService } from './services/supabase';
 import { registerForPushNotifications, addNotificationResponseListener, scheduleExpiryNotifications } from './services/notifications';
+import { DEFAULT_NOTIFICATION_PREFERENCES } from './types';
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
   const [auth, setAuth] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
@@ -68,7 +73,7 @@ const App: React.FC = () => {
         currentUser = {
           id: authUser.id,
           email: authUser.email!,
-          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Benutzer',
+          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || t('app.userFallback'),
           notifications_enabled: true
         };
         // Optional: Create profile if missing? 
@@ -91,18 +96,18 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error("[App] Fehler beim Laden:", err);
-      setLoadError("Daten konnten nicht vollständig geladen werden.");
+      setLoadError(t('app.loadError'));
     } finally {
       setAuth(prev => ({ ...prev, isLoading: false }));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setAuth({
-          user: { id: session.user.id, email: session.user.email!, name: session.user.user_metadata?.full_name || 'Benutzer' },
+          user: { id: session.user.id, email: session.user.email!, name: session.user.user_metadata?.full_name || t('app.userFallback') },
           isAuthenticated: true,
           isLoading: true
         });
@@ -115,7 +120,7 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setAuth({
-          user: { id: session.user.id, email: session.user.email!, name: session.user.user_metadata?.full_name || 'Benutzer' },
+          user: { id: session.user.id, email: session.user.email!, name: session.user.user_metadata?.full_name || t('app.userFallback') },
           isAuthenticated: true,
           isLoading: true
         });
@@ -125,7 +130,7 @@ const App: React.FC = () => {
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (auth.isAuthenticated && auth.user?.id) loadAllUserData(auth.user.id);
@@ -186,17 +191,34 @@ const App: React.FC = () => {
     const Linking = require('react-native').Linking;
 
     // Listen for incoming links while app is open
-    const subscription = Linking.addEventListener('url', handleDeepLink);
+    const deepLinkSubscription = Linking.addEventListener('url', handleDeepLink);
 
     // Check for initial link if app was closed
     Linking.getInitialURL().then((url: string | null) => {
       if (url) handleDeepLink({ url });
     });
 
+    // Deep Linking: Handle notification tap
+    const responseListener = addNotificationResponseListener((response: any) => {
+      try {
+        const data = response.notification.request.content.data;
+        console.log('[App] Notification Response:', data);
+
+        if (data && data.voucherId) {
+          setPendingVoucherId(data.voucherId);
+        } else if (data && data.type === 'family_invitation') {
+          setView('notifications');
+        }
+      } catch (e) {
+        console.error("[App] Deep link error:", e);
+      }
+    });
+
     return () => {
-      subscription.remove();
+      deepLinkSubscription.remove();
+      responseListener.remove();
     };
-  }, [vouchers]); // Re-run when vouchers change
+  }, []);
 
   // Process pending deep link/notification once vouchers are loaded
   useEffect(() => {
@@ -234,12 +256,13 @@ const App: React.FC = () => {
       const updated = await supabaseService.updateVoucher(v);
       setVouchers(prev => prev.map(item => item.id === v.id ? updated : item));
       if (selectedVoucher?.id === v.id) setSelectedVoucher(updated);
-      // Update expiry notifications
-      if (updated.expiry_date) {
+      // Update expiry notifications (check preference)
+      const expiryEnabled = (auth.user?.notification_preferences || DEFAULT_NOTIFICATION_PREFERENCES).voucher_expiry;
+      if (updated.expiry_date && expiryEnabled) {
         scheduleExpiryNotifications(updated.id!, updated.title, updated.expiry_date);
       }
     } catch (e: any) {
-      setToast({ message: "Fehler beim Update: " + e.message, type: 'warning' });
+      setToast({ message: t('voucherDetail.error.updateFailed') + " " + e.message, type: 'warning' });
       throw e; // Fehler an UI weitergeben
     }
   };
@@ -269,12 +292,22 @@ const App: React.FC = () => {
         <View style={styles.content}>
           <View style={{ flex: 1, display: view === 'dashboard' ? 'flex' : 'none' }}>
             <Dashboard
-              vouchers={vouchers} families={families} notifications={notifications}
-              onUpdateVoucher={handleUpdateVoucher} onSelectVoucher={(v) => { setSelectedVoucher(v); setView('detail'); }}
-              onOpenNotifications={() => setView('notifications')} onRefresh={() => loadAllUserData(auth.user!.id)}
-              loadError={loadError} userName={auth.user?.name}
-            />
-          </View>
+              vouchers={vouchers}
+              families={families}
+              notifications={notifications}
+              onUpdateVoucher={handleUpdateVoucher}
+              onSelectVoucher={(v) => { setSelectedVoucher(v); setView('detail'); }}
+              onOpenNotifications={() => setView('notifications')}
+              onSelectNotification={(n) => {
+                // Handle in-app notification click from Dashboard (if we add a mini-list there later)
+                // For now, this is mainly for the NotificationCenter, but Dashboard props need to match.
+                // Actually, NotificationCenter is separate. Let's redirect logic if needed.
+              }}
+              onRefresh={() => loadAllUserData(auth.user?.id || '')}
+              loadError={loadError}
+              userEmail={auth.user?.email}
+              userName={auth.user?.name}
+            /></View>
           {view === 'add' && <AddVoucher families={families} currentUser={auth.user} onCancel={() => setView('dashboard')} onSave={async (v) => {
             try {
               console.log('Saving voucher:', v);
@@ -282,14 +315,15 @@ const App: React.FC = () => {
               console.log('Saved voucher:', saved);
               setVouchers(prev => [saved, ...prev]);
               setView('dashboard');
-              showNotification("Erfolgreich", `Gutschein gespeichert.`, 'success');
-              // Schedule expiry notifications
-              if (saved.expiry_date) {
+              showNotification(t('common.success'), t('app.voucherSaved'), 'success');
+              // Schedule expiry notifications (check preference)
+              const expiryPrefEnabled = (auth.user?.notification_preferences || DEFAULT_NOTIFICATION_PREFERENCES).voucher_expiry;
+              if (saved.expiry_date && expiryPrefEnabled) {
                 scheduleExpiryNotifications(saved.id!, saved.title, saved.expiry_date);
               }
             } catch (error: any) {
               console.error('Save error:', error);
-              alert('Fehler beim Speichern: ' + (error?.message || 'Unbekannter Fehler'));
+              alert(t('app.saveError') + (error?.message || t('app.unknownError')));
             }
           }} />}
           {view === 'families' && (
@@ -344,42 +378,46 @@ const App: React.FC = () => {
           {view === 'notifications' && (
             <NotificationCenter
               notifications={notifications}
-              onBack={() => {
-                // Don't mark all as read automatically anymore
-                setView('dashboard');
-              }}
+              onBack={() => setView('dashboard')}
               onClearAll={() => {
-                supabaseService.markNotificationsAsRead(auth.user?.id || ''); // Clear implies read? Or delete? onClearAll sets state to []
-                setNotifications([]);
+                supabaseService.markNotificationsAsRead(auth.user?.id || '').then(() => {
+                  setNotifications([]);
+                });
               }}
-              onMarkAsRead={async (id) => {
-                await supabaseService.markNotificationAsRead(id);
+              onMarkAsRead={(id) => {
+                supabaseService.markNotificationAsRead(id);
                 setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+              }}
+              onSelectNotification={(n) => {
+                if (n.metadata?.voucher_id) {
+                  const target = vouchers.find(v => v.id === n.metadata?.voucher_id);
+                  if (target) {
+                    setSelectedVoucher(target);
+                    setView('detail');
+                  } else {
+                    setToast({ message: t('app.voucherUnavailable'), type: 'warning' });
+                  }
+                }
               }}
               onAcceptInvite={async (inviteId) => {
                 if (!auth.user) return;
                 try {
                   const { error } = await supabaseService.acceptInviteAtomic(inviteId, auth.user.email, auth.user.name);
-                  if (error) throw new Error(error);
-                  showNotification("Erfolg", "Einladung angenommen!", 'success');
-                  // Refresh data
+                  if (error) throw new Error(error.message || 'Fehler');
+                  setToast({ message: t('app.inviteAccepted'), type: 'success' });
                   await loadAllUserData(auth.user.id);
                 } catch (err: any) {
-                  showNotification("Fehler", err.message || "Fehler beim Annehmen", 'warning');
+                  setToast({ message: err.message || t('app.inviteAcceptError'), type: 'warning' });
                 }
               }}
               onRejectInvite={async (inviteId) => {
                 if (!auth.user) return;
                 try {
-                  await supabaseService.rejectInvite(inviteId);
-                  showNotification("Info", "Einladung abgelehnt", 'info');
-                  // Refresh invites
-                  if (auth.user.email) {
-                    const invites = await supabaseService.getPendingInvitesForUser(auth.user.email);
-                    setPendingInvites(invites);
-                  }
+                  await supabaseService.deleteInvite(inviteId);
+                  setToast({ message: t('app.inviteDeclined'), type: 'info' });
+                  await loadAllUserData(auth.user.id);
                 } catch (err: any) {
-                  showNotification("Fehler", "Fehler beim Ablehnen", 'warning');
+                  setToast({ message: t('app.inviteDeclineError'), type: 'warning' });
                 }
               }}
             />
